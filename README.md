@@ -1,65 +1,77 @@
 # Controle Financeiro
 
-App pessoal de controle financeiro mensal — entradas, despesas fixas e variáveis, metas, cartões, histórico de renda, gráfico por categoria e backup/restore em JSON.
-
-Migração do HTML único anterior (~1.4k linhas com React via Babel standalone) para um projeto Vite + React idiomático, separado em módulos, pronto para deploy no Vercel.
+Aplicação web de controle financeiro pessoal com autenticação e persistência em nuvem via Supabase.
 
 ## Stack
 
-- **Vite 5** — build/dev server
-- **React 18** — UI
-- **Tailwind CSS 3** — estilização (dark mode por classe)
-- **Geist + Geist Mono** — tipografia (sans pra UI, mono com tabular nums pros valores)
-- **lucide-react** — ícones
-- **localStorage** — persistência (chave `controle-financeiro-v3`)
+- **Next.js 14** (App Router)
+- **Tailwind CSS** com suporte a dark mode
+- **Supabase** — autenticação e banco de dados
+- **Lucide React** — ícones
 
-## Rodar localmente
+## Funcionalidades
+
+- Cadastro e login de usuários
+- Despesas fixas (recorrentes) e variáveis (extras)
+- Histórico de renda por período
+- Metas de economia por mês
+- Seleção de cartões de crédito
+- Dashboard mensal com resumo financeiro
+- Dark mode
+
+## Configuração
+
+### 1. Clone e instale as dependências
 
 ```bash
+git clone https://github.com/Ighorpb/controle-financeiro.git
+cd controle-financeiro
 npm install
+```
+
+### 2. Configure as variáveis de ambiente
+
+Crie um arquivo `.env.local` na raiz do projeto:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=sua_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_supabase_anon_key
+```
+
+### 3. Inicie o servidor de desenvolvimento
+
+```bash
 npm run dev
 ```
 
-Abre em `http://localhost:5173` por padrão.
+Acesse [http://localhost:3000](http://localhost:3000).
 
-Build de produção:
+## Scripts
 
 ```bash
-npm run build
-npm run preview   # serve o /dist localmente
+npm run dev      # Servidor de desenvolvimento
+npm run build    # Build de produção
+npm run start    # Servidor de produção
+npm run lint     # Lint com ESLint
 ```
 
 ## Estrutura
 
 ```
-src/
-├── App.jsx                  # componente raiz (FinanceTracker)
-├── main.jsx                 # entry point
-├── index.css                # Tailwind + estilos globais
-├── constants.js             # categorias, cartões padrão, storage keys
-├── helpers.js               # formatação, datas, migração de dados, parcelas
-└── components/
-    ├── BankLogo.jsx         # SVGs dos bancos
-    ├── Modal.jsx            # modal genérico (renda, extra, despesa, meta, fixa)
-    ├── CardsModal.jsx       # seletor de cartões ativos
-    └── IncomeHistoryModal.jsx
+app/
+  api/auth/            # Rotas de login e signup (server-side)
+  login/               # Página de login
+  signup/              # Página de cadastro
+  page.jsx             # Dashboard principal
+components/
+  FinanceTracker.jsx   # Componente principal com todo o estado
+  Modal.jsx            # Modal de lançamentos (receita, despesa, meta, etc.)
+  AuthGuard.jsx        # Proteção de rotas autenticadas
+  CardsModal.jsx       # Modal de seleção de cartões
+  IncomeHistoryModal.jsx
+lib/
+  supabase.js          # Cliente Supabase
+  db.js                # Funções de acesso ao banco
+  helpers.js           # Funções puras de cálculo financeiro
+  constants.js         # Categorias, cartões e chaves de configuração
 ```
-
-## Persistência atual e roadmap
-
-Hoje os dados ficam só em `localStorage` — por navegador, por dispositivo. Cada pessoa que abrir o link tem dados separados, e os seus dados não sincronizam entre PC e celular. Para feedback de UX/funcionalidade isso é suficiente; para uso real multi-dispositivo, a próxima etapa é o backend.
-
-**Próximas etapas previstas:**
-
-1. Login (Google/email)
-2. Persistir o JSON em backend leve (Supabase, Firebase ou PostgreSQL próprio com RLS por usuário)
-3. Backup/restore continua funcionando como exportação manual além do sync automático
-
-A função `migrateData` em `helpers.js` já lida com versões anteriores do schema, então quando o backend entrar é só ler o JSON do banco e passar pela mesma função.
-
-## Notas de migração
-
-- Os ícones inline foram trocados por `lucide-react` — visual idêntico, código mais limpo, tree-shaking
-- `Copy` icon, `copied` state, `exportCSV` e `exportMarkdown` do original não foram migrados porque estavam definidos mas nunca chamados na UI; se quiser surfaçar depois é trivial reativar
-- Tailwind agora é build-time (não mais CDN), o que reduz o bundle e habilita purge em produção
-- Schema do `localStorage` mantido idêntico (`controle-financeiro-v3`) — quem já usa o HTML antigo vai ver os dados aparecerem no React sem importar nada
