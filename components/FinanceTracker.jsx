@@ -8,7 +8,8 @@ import {
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
-import { CATEGORIES, STORAGE_KEY, THEME_KEY } from '@/lib/constants'
+import * as db from '@/lib/db'
+import { CATEGORIES, THEME_KEY } from '@/lib/constants'
 import {
   formatBRL, monthKey, monthLabel, emptyMonth,
   findCategory, findCard, getApplicableIncome, migrateData, getInstallmentInfo,
@@ -31,31 +32,31 @@ export default function FinanceTracker() {
   const [theme, setTheme] = useState('light')
   const [loggingOut, setLoggingOut] = useState(false)
   const fileInputRef = useRef(null)
+  const userIdRef = useRef(null)
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setData(migrateData(JSON.parse(raw)))
-      const savedTheme = localStorage.getItem(THEME_KEY)
-      if (savedTheme === 'dark' || savedTheme === 'light') {
-        setTheme(savedTheme)
-      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        setTheme('dark')
-      }
-    } catch (e) { console.error('Erro ao carregar:', e) }
-    setLoaded(true)
+    const savedTheme = localStorage.getItem(THEME_KEY)
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      setTheme(savedTheme)
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark')
+    }
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { setLoaded(true); return }
+      userIdRef.current = user.id
+      db.loadAllData(user.id).then(({ data: fetchedData, error }) => {
+        if (error) console.error('Erro ao carregar dados:', error)
+        else if (fetchedData) setData(fetchedData)
+        setLoaded(true)
+      })
+    })
   }, [])
 
   useEffect(() => {
-    if (!loaded) return
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) }
-    catch (e) { console.error('Erro ao salvar:', e) }
-  }, [data, loaded])
-
-  useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
-    if (loaded) localStorage.setItem(THEME_KEY, theme)
-  }, [theme, loaded])
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
 
   const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
 
@@ -99,26 +100,104 @@ export default function FinanceTracker() {
       monthlyData: { ...prev.monthlyData, [currentMonth]: updater(prev.monthlyData[currentMonth] || emptyMonth()) },
     }))
 
-  const setIncomeEntry = ({ amount, startMonth }) =>
-    setData((prev) => ({
-      ...prev,
-      incomeHistory: [...prev.incomeHistory.filter((e) => e.startMonth !== startMonth), { startMonth, amount }]
+  const setIncomeEntry = async ({ amount, startMonth }) => {
+    const prev = data.incomeHistory
+    setData((d) => ({
+      ...d,
+      incomeHistory: [...d.incomeHistory.filter((e) => e.startMonth !== startMonth), { startMonth, amount }]
         .sort((a, b) => a.startMonth.localeCompare(b.startMonth)),
     }))
+    const { error } = await db.upsertIncome(userIdRef.current, { startMonth, amount })
+    if (error) {
+      console.error('Erro ao salvar renda:', error)
+      setData((d) => ({ ...d, incomeHistory: prev }))
+      alert('Erro ao salvar renda. Tente novamente.')
+    }
+  }
 
-  const removeIncomeEntry = (startMonth) =>
-    setData((prev) => ({ ...prev, incomeHistory: prev.incomeHistory.filter((e) => e.startMonth !== startMonth) }))
+  const removeIncomeEntry = async (startMonth) => {
+    const prev = data.incomeHistory
+    setData((d) => ({ ...d, incomeHistory: d.incomeHistory.filter((e) => e.startMonth !== startMonth) }))
+    const { error } = await db.deleteIncome(userIdRef.current, startMonth)
+    if (error) {
+      console.error('Erro ao remover renda:', error)
+      setData((d) => ({ ...d, incomeHistory: prev }))
+      alert('Erro ao remover renda.')
+    }
+  }
 
-  const addExtra = (entry) => updateMonth((m) => ({ ...m, extras: [...m.extras, { ...entry, id: Date.now() + Math.random() }] }))
-  const addExpense = (entry) => updateMonth((m) => ({ ...m, expenses: [...m.expenses, { ...entry, id: Date.now() + Math.random() }] }))
-  const removeExtra = (id) => updateMonth((m) => ({ ...m, extras: m.extras.filter((e) => e.id !== id) }))
-  const removeExpense = (id) => updateMonth((m) => ({ ...m, expenses: m.expenses.filter((e) => e.id !== id) }))
-  const setGoal = (amount) => setData((prev) => ({ ...prev, goals: { ...prev.goals, [currentMonth]: amount } }))
+  const addExtra = async (entry) => {
+    const id = crypto.randomUUID()
+    const newEntry = { ...entry, id }
+    updateMonth((m) => ({ ...m, extras: [...m.extras, newEntry] }))
+    const { error } = await db.insertExtra(userIdRef.current, newEntry, currentMonth)
+    if (error) {
+      console.error('Erro ao salvar ganho extra:', error)
+      updateMonth((m) => ({ ...m, extras: m.extras.filter((e) => e.id !== id) }))
+      alert('Erro ao salvar ganho extra.')
+    }
+  }
 
-  const addRecurring = (entry) =>
-    setData((prev) => ({ ...prev, recurring: [...prev.recurring, { ...entry, id: Date.now() + Math.random() }] }))
+  const addExpense = async (entry) => {
+    const id = crypto.randomUUID()
+    const newEntry = { ...entry, id }
+    updateMonth((m) => ({ ...m, expenses: [...m.expenses, newEntry] }))
+    const { error } = await db.insertExpense(userIdRef.current, newEntry, currentMonth)
+    if (error) {
+      console.error('Erro ao salvar despesa:', error)
+      updateMonth((m) => ({ ...m, expenses: m.expenses.filter((e) => e.id !== id) }))
+      alert('Erro ao salvar despesa.')
+    }
+  }
 
-  const removeRecurring = (id) =>
+  const removeExtra = async (id) => {
+    const prev = data.monthlyData[currentMonth]?.extras || []
+    updateMonth((m) => ({ ...m, extras: m.extras.filter((e) => e.id !== id) }))
+    const { error } = await db.deleteExtra(userIdRef.current, id)
+    if (error) {
+      console.error('Erro ao remover ganho extra:', error)
+      updateMonth((m) => ({ ...m, extras: prev }))
+      alert('Erro ao remover ganho extra.')
+    }
+  }
+
+  const removeExpense = async (id) => {
+    const prev = data.monthlyData[currentMonth]?.expenses || []
+    updateMonth((m) => ({ ...m, expenses: m.expenses.filter((e) => e.id !== id) }))
+    const { error } = await db.deleteExpense(userIdRef.current, id)
+    if (error) {
+      console.error('Erro ao remover despesa:', error)
+      updateMonth((m) => ({ ...m, expenses: prev }))
+      alert('Erro ao remover despesa.')
+    }
+  }
+
+  const setGoal = async (amount) => {
+    const prevGoals = data.goals
+    setData((prev) => ({ ...prev, goals: { ...prev.goals, [currentMonth]: amount } }))
+    const { error } = await db.upsertGoal(userIdRef.current, currentMonth, amount)
+    if (error) {
+      console.error('Erro ao salvar meta:', error)
+      setData((prev) => ({ ...prev, goals: prevGoals }))
+      alert('Erro ao salvar meta.')
+    }
+  }
+
+  const addRecurring = async (entry) => {
+    const id = crypto.randomUUID()
+    const newEntry = { ...entry, id }
+    setData((prev) => ({ ...prev, recurring: [...prev.recurring, newEntry] }))
+    const { error } = await db.insertRecurring(userIdRef.current, newEntry)
+    if (error) {
+      console.error('Erro ao salvar despesa fixa:', error)
+      setData((prev) => ({ ...prev, recurring: prev.recurring.filter((r) => r.id !== id) }))
+      alert('Erro ao salvar despesa fixa.')
+    }
+  }
+
+  const removeRecurring = async (id) => {
+    const prevRecurring = data.recurring
+    const prevDisabled = data.disabledRecurring
     setData((prev) => ({
       ...prev,
       recurring: prev.recurring.filter((r) => r.id !== id),
@@ -126,22 +205,61 @@ export default function FinanceTracker() {
         Object.entries(prev.disabledRecurring).map(([month, ids]) => [month, ids.filter((rid) => rid !== id)])
       ),
     }))
+    const { error } = await db.deleteRecurring(id)
+    if (error) {
+      console.error('Erro ao remover despesa fixa:', error)
+      setData((prev) => ({ ...prev, recurring: prevRecurring, disabledRecurring: prevDisabled }))
+      alert('Erro ao remover despesa fixa.')
+    }
+  }
 
-  const updateRecurring = (id, updates) =>
+  const updateRecurring = async (id, updates) => {
+    const prevRecurring = data.recurring
     setData((prev) => ({ ...prev, recurring: prev.recurring.map((r) => (r.id === id ? { ...r, ...updates } : r)) }))
+    const { error } = await db.updateRecurringEntry(id, updates)
+    if (error) {
+      console.error('Erro ao atualizar despesa fixa:', error)
+      setData((prev) => ({ ...prev, recurring: prevRecurring }))
+      alert('Erro ao atualizar despesa fixa.')
+    }
+  }
 
-  const toggleRecurringForMonth = (id) =>
+  const toggleRecurringForMonth = async (id) => {
+    const cur = data.disabledRecurring[currentMonth] || []
+    const isDisabled = cur.includes(id)
     setData((prev) => {
-      const cur = prev.disabledRecurring[currentMonth] || []
-      const next = cur.includes(id) ? cur.filter((d) => d !== id) : [...cur, id]
+      const curIds = prev.disabledRecurring[currentMonth] || []
+      const next = curIds.includes(id) ? curIds.filter((d) => d !== id) : [...curIds, id]
       return { ...prev, disabledRecurring: { ...prev.disabledRecurring, [currentMonth]: next } }
     })
+    const { error } = isDisabled
+      ? await db.enableRecurring(userIdRef.current, currentMonth, id)
+      : await db.disableRecurring(userIdRef.current, currentMonth, id)
+    if (error) {
+      console.error('Erro ao atualizar despesa fixa:', error)
+      setData((prev) => ({ ...prev, disabledRecurring: { ...prev.disabledRecurring, [currentMonth]: cur } }))
+      alert('Erro ao atualizar despesa fixa.')
+    }
+  }
 
-  const toggleCard = (cardId) =>
+  const toggleCard = async (cardId) => {
+    const isActive = data.cards.includes(cardId)
     setData((prev) => ({
       ...prev,
-      cards: prev.cards.includes(cardId) ? prev.cards.filter((c) => c !== cardId) : [...prev.cards, cardId],
+      cards: isActive ? prev.cards.filter((c) => c !== cardId) : [...prev.cards, cardId],
     }))
+    const { error } = isActive
+      ? await db.deleteCard(userIdRef.current, cardId)
+      : await db.insertCard(userIdRef.current, cardId)
+    if (error) {
+      console.error('Erro ao atualizar cartão:', error)
+      setData((prev) => ({
+        ...prev,
+        cards: isActive ? [...prev.cards, cardId] : prev.cards.filter((c) => c !== cardId),
+      }))
+      alert('Erro ao atualizar cartão.')
+    }
+  }
 
   const changeMonth = (delta) => {
     const [y, m] = currentMonth.split('-').map(Number)
@@ -167,11 +285,19 @@ export default function FinanceTracker() {
     const file = e.target.files[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const parsed = JSON.parse(ev.target.result)
         if (!parsed.monthlyData) throw new Error('Arquivo inválido')
-        if (confirm('Isso vai substituir TODOS os dados atuais. Continuar?')) setData(migrateData(parsed))
+        if (confirm('Isso vai substituir TODOS os dados atuais. Continuar?')) {
+          const migrated = migrateData(parsed)
+          setData(migrated)
+          const { error } = await db.replaceAllData(userIdRef.current, migrated)
+          if (error) {
+            console.error('Erro ao importar backup:', error)
+            alert('Dados importados localmente, mas houve erro ao salvar no servidor. Recarregue a página.')
+          }
+        }
       } catch { alert('Arquivo de backup inválido.') }
     }
     reader.readAsText(file)
