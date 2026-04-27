@@ -4,9 +4,10 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight,
   Trash2, Target, Repeat, Download, BarChart3, CreditCard,
-  Upload, Sun, Moon, Pencil,
+  Upload, Sun, Moon, Pencil, LogOut,
 } from 'lucide-react'
 
+import { supabase } from '@/lib/supabase'
 import { CATEGORIES, STORAGE_KEY, THEME_KEY } from '@/lib/constants'
 import {
   formatBRL, monthKey, monthLabel, emptyMonth,
@@ -28,6 +29,7 @@ export default function FinanceTracker() {
   const [editingRecurring, setEditingRecurring] = useState(null)
   const [editingIncome, setEditingIncome] = useState(null)
   const [theme, setTheme] = useState('light')
+  const [loggingOut, setLoggingOut] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -56,6 +58,16 @@ export default function FinanceTracker() {
   }, [theme, loaded])
 
   const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
+
+  const handleLogout = async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Erro ao sair:', error)
+      setLoggingOut(false)
+    }
+  }
 
   const monthData = data.monthlyData[currentMonth] || emptyMonth()
   const disabledIds = data.disabledRecurring[currentMonth] || []
@@ -182,13 +194,23 @@ export default function FinanceTracker() {
         <header className="mb-6">
           <div className="flex items-center justify-between mb-1">
             <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400">Controle</p>
-            <button
-              onClick={toggleTheme}
-              className="w-7 h-7 rounded-full flex items-center justify-center bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-stone-700 dark:text-stone-300"
-              aria-label="Alternar tema"
-            >
-              {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleTheme}
+                className="w-7 h-7 rounded-full flex items-center justify-center bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-stone-700 dark:text-stone-300"
+                aria-label="Alternar tema"
+              >
+                {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
+              </button>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="w-7 h-7 rounded-full flex items-center justify-center bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-stone-700 dark:text-stone-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Sair"
+              >
+                <LogOut size={13} />
+              </button>
+            </div>
           </div>
           <h1 className="text-3xl mb-5 font-light tracking-tight">
             Suas <em className="not-italic font-semibold">finanças</em> do mês
