@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight,
   Trash2, Target, Repeat, Download, BarChart3, CreditCard,
@@ -19,6 +19,10 @@ import BankLogo from './BankLogo'
 import Modal from './Modal'
 import CardsModal from './CardsModal'
 import IncomeHistoryModal from './IncomeHistoryModal'
+import ToastContainer from './Toast'
+import ConfirmDialog from './ConfirmDialog'
+import ProgressRing from './ProgressRing'
+import DonutChart from './DonutChart'
 
 export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
@@ -33,6 +37,24 @@ export default function FinanceTracker() {
   const [loggingOut, setLoggingOut] = useState(false)
   const fileInputRef = useRef(null)
   const userIdRef = useRef(null)
+  const [toasts, setToasts] = useState([])
+  const [confirmState, setConfirmState] = useState(null)
+
+  const addToast = useCallback((message, type = 'error') => {
+    setToasts((t) => [...t, { id: crypto.randomUUID(), message, type }])
+  }, [])
+  const dismissToast = useCallback((id) => {
+    setToasts((t) => t.filter((x) => x.id !== id))
+  }, [])
+
+  const askConfirm = (message, confirmLabel) =>
+    new Promise((resolve) => setConfirmState({ message, confirmLabel, resolve }))
+  const resolveConfirm = (value) => {
+    setConfirmState((s) => {
+      s?.resolve(value)
+      return null
+    })
+  }
 
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY)
@@ -92,7 +114,6 @@ export default function FinanceTracker() {
   })
   const chartData = CATEGORIES.map((c) => ({ ...c, value: expensesByCategory[c.id] || 0 }))
     .filter((c) => c.value > 0).sort((a, b) => b.value - a.value)
-  const chartMax = Math.max(...chartData.map((c) => c.value), 1)
 
   const updateMonth = (updater) =>
     setData((prev) => ({
@@ -111,7 +132,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao salvar renda:', error)
       setData((d) => ({ ...d, incomeHistory: prev }))
-      alert('Erro ao salvar renda. Tente novamente.')
+      addToast('Erro ao salvar renda. Tente novamente.')
     }
   }
 
@@ -122,7 +143,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao remover renda:', error)
       setData((d) => ({ ...d, incomeHistory: prev }))
-      alert('Erro ao remover renda.')
+      addToast('Erro ao remover renda.')
     }
   }
 
@@ -134,7 +155,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao salvar ganho extra:', error)
       updateMonth((m) => ({ ...m, extras: m.extras.filter((e) => e.id !== id) }))
-      alert('Erro ao salvar ganho extra.')
+      addToast('Erro ao salvar ganho extra.')
     }
   }
 
@@ -146,7 +167,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao salvar despesa:', error)
       updateMonth((m) => ({ ...m, expenses: m.expenses.filter((e) => e.id !== id) }))
-      alert('Erro ao salvar despesa.')
+      addToast('Erro ao salvar despesa.')
     }
   }
 
@@ -157,7 +178,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao remover ganho extra:', error)
       updateMonth((m) => ({ ...m, extras: prev }))
-      alert('Erro ao remover ganho extra.')
+      addToast('Erro ao remover ganho extra.')
     }
   }
 
@@ -168,7 +189,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao remover despesa:', error)
       updateMonth((m) => ({ ...m, expenses: prev }))
-      alert('Erro ao remover despesa.')
+      addToast('Erro ao remover despesa.')
     }
   }
 
@@ -179,7 +200,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao salvar meta:', error)
       setData((prev) => ({ ...prev, goals: prevGoals }))
-      alert('Erro ao salvar meta.')
+      addToast('Erro ao salvar meta.')
     }
   }
 
@@ -191,7 +212,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao salvar despesa fixa:', error)
       setData((prev) => ({ ...prev, recurring: prev.recurring.filter((r) => r.id !== id) }))
-      alert('Erro ao salvar despesa fixa.')
+      addToast('Erro ao salvar despesa fixa.')
     }
   }
 
@@ -209,7 +230,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao remover despesa fixa:', error)
       setData((prev) => ({ ...prev, recurring: prevRecurring, disabledRecurring: prevDisabled }))
-      alert('Erro ao remover despesa fixa.')
+      addToast('Erro ao remover despesa fixa.')
     }
   }
 
@@ -220,7 +241,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao atualizar despesa fixa:', error)
       setData((prev) => ({ ...prev, recurring: prevRecurring }))
-      alert('Erro ao atualizar despesa fixa.')
+      addToast('Erro ao atualizar despesa fixa.')
     }
   }
 
@@ -238,7 +259,7 @@ export default function FinanceTracker() {
     if (error) {
       console.error('Erro ao atualizar despesa fixa:', error)
       setData((prev) => ({ ...prev, disabledRecurring: { ...prev.disabledRecurring, [currentMonth]: cur } }))
-      alert('Erro ao atualizar despesa fixa.')
+      addToast('Erro ao atualizar despesa fixa.')
     }
   }
 
@@ -257,7 +278,7 @@ export default function FinanceTracker() {
         ...prev,
         cards: isActive ? [...prev.cards, cardId] : prev.cards.filter((c) => c !== cardId),
       }))
-      alert('Erro ao atualizar cartão.')
+      addToast('Erro ao atualizar cartão.')
     }
   }
 
@@ -289,16 +310,19 @@ export default function FinanceTracker() {
       try {
         const parsed = JSON.parse(ev.target.result)
         if (!parsed.monthlyData) throw new Error('Arquivo inválido')
-        if (confirm('Isso vai substituir TODOS os dados atuais. Continuar?')) {
+        const ok = await askConfirm('Isso vai substituir TODOS os dados atuais. Continuar?', 'Substituir tudo')
+        if (ok) {
           const migrated = migrateData(parsed)
           setData(migrated)
           const { error } = await db.replaceAllData(userIdRef.current, migrated)
           if (error) {
             console.error('Erro ao importar backup:', error)
-            alert('Dados importados localmente, mas houve erro ao salvar no servidor. Recarregue a página.')
+            addToast('Dados importados localmente, mas houve erro ao salvar no servidor. Recarregue a página.')
+          } else {
+            addToast('Backup restaurado com sucesso.', 'success')
           }
         }
-      } catch { alert('Arquivo de backup inválido.') }
+      } catch { addToast('Arquivo de backup inválido.') }
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -403,20 +427,25 @@ export default function FinanceTracker() {
             </button>
           </div>
           {goal > 0 ? (
-            <>
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="text-2xl font-mono">{formatBRL(saved)}</p>
-                <p className="text-sm text-stone-500 dark:text-stone-400">de {formatBRL(goal)}</p>
+            <div className="flex items-center gap-4">
+              <div className="relative flex-shrink-0">
+                <ProgressRing progress={goalProgress} done={goalProgress >= 1} />
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-mono font-semibold">
+                  {Math.round(goalProgress * 100)}%
+                </span>
               </div>
-              <div className="h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden mb-2">
-                <div className={`h-full rounded-full transition-all duration-500 ${goalProgress >= 1 ? 'bg-emerald-600' : 'bg-stone-900 dark:bg-stone-100'}`} style={{ width: `${goalProgress * 100}%` }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-2xl font-mono">
+                  {formatBRL(saved)}{' '}
+                  <span className="text-sm font-sans text-stone-500 dark:text-stone-400">de {formatBRL(goal)}</span>
+                </p>
+                <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                  {goalProgress >= 1 ? `Meta batida! Sobraram ${formatBRL(saved - goal)} além da meta.`
+                    : isRed ? 'Feche o vermelho primeiro pra começar a guardar.'
+                    : `Faltam ${formatBRL(goal - saved)} pra fechar a meta.`}
+                </p>
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">
-                {goalProgress >= 1 ? `Meta batida! Sobraram ${formatBRL(saved - goal)} além da meta.`
-                  : isRed ? `${Math.round(goalProgress * 100)}% — feche o vermelho primeiro.`
-                  : `${Math.round(goalProgress * 100)}% — faltam ${formatBRL(goal - saved)} pra fechar a meta.`}
-              </p>
-            </>
+            </div>
           ) : (
             <p className="text-sm text-stone-500 dark:text-stone-400">Sem meta esse mês. Defina um valor pra acompanhar quanto você está conseguindo guardar.</p>
           )}
@@ -488,7 +517,7 @@ export default function FinanceTracker() {
                         {isDisabled ? 'OFF' : 'ON'}
                       </button>
                       <button onClick={() => setEditingRecurring(r)} className="text-stone-300 dark:text-stone-600 hover:text-stone-700 dark:hover:text-stone-300 p-1.5 transition" aria-label="Editar"><Pencil size={13} /></button>
-                      <button onClick={() => { if (confirm(`Remover "${r.description}" das despesas fixas?`)) removeRecurring(r.id) }} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-1.5 transition" aria-label="Remover"><Trash2 size={13} /></button>
+                      <button onClick={() => askConfirm(`Remover "${r.description}" das despesas fixas?`, 'Remover').then((ok) => { if (ok) removeRecurring(r.id) })} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-1.5 transition" aria-label="Remover"><Trash2 size={13} /></button>
                     </div>
                   </li>
                 )
@@ -551,21 +580,28 @@ export default function FinanceTracker() {
         {chartData.length > 0 && (
           <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-5 mb-3">
             <div className="flex items-center gap-2 mb-4"><BarChart3 size={14} className="text-stone-500 dark:text-stone-400" /><p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Gastos por categoria</p></div>
-            <div className="space-y-3">
-              {chartData.map((c) => {
-                const pct = Math.round((c.value / totalExpenses) * 100)
-                return (
-                  <div key={c.id}>
-                    <div className="flex items-center justify-between mb-1.5 text-sm">
-                      <span className="flex items-center gap-2"><span>{c.emoji}</span><span className="text-stone-700 dark:text-stone-300">{c.label}</span><span className="text-xs text-stone-400 dark:text-stone-500">{pct}%</span></span>
-                      <span className="font-medium text-stone-900 dark:text-stone-100">{formatBRL(c.value)}</span>
-                    </div>
-                    <div className="h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(c.value / chartMax) * 100}%`, backgroundColor: c.color }} />
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="flex flex-col sm:flex-row items-center gap-5">
+              <div className="relative flex-shrink-0">
+                <DonutChart data={chartData} total={totalExpenses} />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500">Total</span>
+                  <span className="text-sm font-mono font-semibold">{formatBRL(totalExpenses)}</span>
+                </div>
+              </div>
+              <ul className="flex-1 w-full space-y-2 min-w-0">
+                {chartData.map((c) => {
+                  const pct = Math.round((c.value / totalExpenses) * 100)
+                  return (
+                    <li key={c.id} className="flex items-center gap-2 text-sm">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
+                      <span className="flex-shrink-0">{c.emoji}</span>
+                      <span className="text-stone-700 dark:text-stone-300 truncate flex-1">{c.label}</span>
+                      <span className="text-xs text-stone-400 dark:text-stone-500 flex-shrink-0">{pct}%</span>
+                      <span className="font-medium text-stone-900 dark:text-stone-100 whitespace-nowrap">{formatBRL(c.value)}</span>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
           </div>
         )}
@@ -633,6 +669,13 @@ export default function FinanceTracker() {
           onSubmit={(payload) => { updateRecurring(editingRecurring.id, payload); setEditingRecurring(null) }}
         />
       )}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmDialog
+        state={confirmState}
+        onConfirm={() => resolveConfirm(true)}
+        onCancel={() => resolveConfirm(false)}
+      />
     </div>
   )
 }
