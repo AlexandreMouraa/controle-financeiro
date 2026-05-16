@@ -7,11 +7,11 @@ export default function IncomeHistoryModal({ onClose, incomeHistory, onRemove, o
   const sorted = [...incomeHistory].sort((a, b) => b.startMonth.localeCompare(a.startMonth))
   return (
     <div
-      className="fixed inset-0 bg-stone-900/40 dark:bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 bg-stone-900/40 dark:bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overlay-in"
       onClick={onClose}
     >
       <div
-        className="bg-stone-50 dark:bg-stone-950 rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border border-transparent dark:border-stone-800"
+        className="bg-stone-50 dark:bg-stone-950 rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border border-transparent dark:border-stone-800 sheet-panel"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-5">
@@ -39,7 +39,7 @@ export default function IncomeHistoryModal({ onClose, incomeHistory, onRemove, o
                     <Pencil size={13} />
                   </button>
                   <button
-                    onClick={() => { if (confirm(`Remover renda de ${monthLabel(entry.startMonth)}?`)) onRemove(entry.startMonth) }}
+                    onClick={() => onRemove(entry.startMonth)}
                     className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-1.5 transition"
                     aria-label="Remover"
                   >

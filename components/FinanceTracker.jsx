@@ -11,8 +11,8 @@ import { supabase } from '@/lib/supabase'
 import * as db from '@/lib/db'
 import { CATEGORIES, THEME_KEY } from '@/lib/constants'
 import {
-  formatBRL, monthKey, monthLabel, emptyMonth,
-  findCategory, findCard, getApplicableIncome, migrateData, getInstallmentInfo,
+  formatBRL, monthKey, monthLabel, emptyMonth, shiftMonth, computeMonthSummary,
+  findCategory, findCard, migrateData, getInstallmentInfo,
 } from '@/lib/helpers'
 
 import BankLogo from './BankLogo'
@@ -23,6 +23,10 @@ import ToastContainer from './Toast'
 import ConfirmDialog from './ConfirmDialog'
 import ProgressRing from './ProgressRing'
 import DonutChart from './DonutChart'
+import CountUp from './CountUp'
+import Sparkline from './Sparkline'
+import DashboardSkeleton from './DashboardSkeleton'
+import EmptyState from './EmptyState'
 
 export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
@@ -95,18 +99,37 @@ export default function FinanceTracker() {
   const monthData = data.monthlyData[currentMonth] || emptyMonth()
   const disabledIds = data.disabledRecurring[currentMonth] || []
   const activeRecurring = data.recurring.filter((r) => !disabledIds.includes(r.id))
-  const recurringTotal = activeRecurring.reduce((s, e) => s + e.amount, 0)
-  const mainIncome = getApplicableIncome(data.incomeHistory, currentMonth)
-  const totalExtras = monthData.extras.reduce((s, e) => s + e.amount, 0)
-  const totalIncome = mainIncome + totalExtras
-  const variableExpensesTotal = monthData.expenses.reduce((s, e) => s + e.amount, 0)
-  const totalExpenses = variableExpensesTotal + recurringTotal
-  const balance = totalIncome - totalExpenses
+  const {
+    recurringTotal, mainIncome, totalExtras, totalIncome,
+    variableExpensesTotal, totalExpenses, balance,
+  } = computeMonthSummary(data, currentMonth)
   const isRed = balance < 0
   const goal = data.goals[currentMonth] || 0
   const saved = Math.max(balance, 0)
   const goalProgress = goal > 0 ? Math.min(saved / goal, 1) : 0
   const userCards = data.cards.map((id) => findCard(id)).filter(Boolean)
+
+  const prevBalance = computeMonthSummary(data, shiftMonth(currentMonth, -1)).balance
+  const balanceDelta = balance - prevBalance
+  const sparkValues = Array.from({ length: 6 }, (_, i) =>
+    computeMonthSummary(data, shiftMonth(currentMonth, i - 5)).balance
+  )
+  const committedPct = totalIncome > 0 ? totalExpenses / totalIncome : 0
+  const health = isRed
+    ? { label: 'No vermelho', cls: 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300' }
+    : goal > 0 && saved >= goal
+    ? { label: 'Meta batida', cls: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' }
+    : committedPct >= 0.9
+    ? { label: 'Atenção', cls: 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300' }
+    : { label: 'Tranquilo', cls: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' }
+
+  const hasAnyData =
+    data.incomeHistory.length > 0 ||
+    data.recurring.length > 0 ||
+    data.cards.length > 0 ||
+    Object.keys(data.goals).length > 0 ||
+    Object.values(data.monthlyData).some((m) => m.expenses.length > 0 || m.extras.length > 0)
+  const isEmpty = loaded && hasAnyData === false
 
   const expensesByCategory = {}
   ;[...monthData.expenses, ...activeRecurring].forEach((e) => {
@@ -328,13 +351,7 @@ export default function FinanceTracker() {
     e.target.value = ''
   }
 
-  if (!loaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950">
-        <p className="text-stone-400 dark:text-stone-500 text-sm">Carregando…</p>
-      </div>
-    )
-  }
+  if (!loaded) return <DashboardSkeleton />
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 transition-colors">
@@ -343,7 +360,14 @@ export default function FinanceTracker() {
         {/* Header */}
         <header className="mb-6">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400">Controle</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400">Controle</p>
+              {!isEmpty && (
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${health.cls}`}>
+                  {health.label}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleTheme}
@@ -376,6 +400,11 @@ export default function FinanceTracker() {
           </div>
         </header>
 
+        {isEmpty ? (
+          <EmptyState onAddIncome={() => setModal('income')} onAddExpense={() => setModal('expense')} />
+        ) : (
+        <>
+
         {/* Renda principal */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800 mb-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -394,26 +423,60 @@ export default function FinanceTracker() {
 
         {/* Saldo */}
         <div className={`rounded-3xl p-6 mb-3 border ${isRed ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900/40' : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/40'}`}>
-          <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400 mb-2">{isRed ? 'No vermelho' : 'Saldo do mês'}</p>
-          <p className={`text-5xl mb-2 font-mono tracking-tight ${isRed ? 'text-rose-900 dark:text-rose-300' : 'text-emerald-900 dark:text-emerald-300'}`}>
-            {formatBRL(balance)}
-          </p>
-          <p className="text-sm text-stone-600 dark:text-stone-400">{formatBRL(totalIncome)} entrou · {formatBRL(totalExpenses)} saiu</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400 mb-2">{isRed ? 'No vermelho' : 'Saldo do mês'}</p>
+              <p className={`text-5xl mb-2 font-mono tracking-tight ${isRed ? 'text-rose-900 dark:text-rose-300' : 'text-emerald-900 dark:text-emerald-300'}`}>
+                <CountUp value={balance} format={formatBRL} />
+              </p>
+            </div>
+            <div className="flex-shrink-0 pt-1">
+              <Sparkline values={sparkValues} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm text-stone-600 dark:text-stone-400">{formatBRL(totalIncome)} entrou · {formatBRL(totalExpenses)} saiu</p>
+            {balanceDelta !== 0 && (
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${balanceDelta > 0 ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300'}`}>
+                {balanceDelta > 0 ? '↑' : '↓'} {formatBRL(Math.abs(balanceDelta))} vs. {monthLabel(shiftMonth(currentMonth, -1)).split(' de ')[0]}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Entradas / Saídas */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800">
             <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400 text-[10px] uppercase tracking-[0.15em] mb-2"><TrendingUp size={12} /> Entradas</div>
-            <p className="text-2xl font-mono">{formatBRL(totalIncome)}</p>
+            <p className="text-2xl font-mono"><CountUp value={totalIncome} format={formatBRL} /></p>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Renda + {monthData.extras.length} {monthData.extras.length === 1 ? 'extra' : 'extras'}</p>
           </div>
           <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800">
             <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400 text-[10px] uppercase tracking-[0.15em] mb-2"><TrendingDown size={12} /> Saídas</div>
-            <p className="text-2xl font-mono">{formatBRL(totalExpenses)}</p>
+            <p className="text-2xl font-mono"><CountUp value={totalExpenses} format={formatBRL} /></p>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">{activeRecurring.length} fixas + {monthData.expenses.length} variáveis</p>
           </div>
         </div>
+
+        {totalIncome > 0 && (
+          <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800 mb-3">
+            <div className="flex items-center justify-between mb-2 text-xs">
+              <span className="text-stone-500 dark:text-stone-400">Renda comprometida</span>
+              <span className="font-medium">{Math.round(committedPct * 100)}%</span>
+            </div>
+            <div className="h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${committedPct >= 1 ? 'bg-rose-600' : committedPct >= 0.9 ? 'bg-amber-500' : 'bg-emerald-600'}`}
+                style={{ width: `${Math.min(committedPct, 1) * 100}%` }}
+              />
+            </div>
+            <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
+              {committedPct >= 1
+                ? 'Você gastou mais do que ganhou este mês.'
+                : `Sobram ${formatBRL(totalIncome - totalExpenses)} da sua renda.`}
+            </p>
+          </div>
+        )}
 
         {/* Meta */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 border border-stone-200 dark:border-stone-800 mb-3">
@@ -497,7 +560,7 @@ export default function FinanceTracker() {
                 const displayEmoji = r.category === 'outros' && r.customCategoryEmoji ? r.customCategoryEmoji : cat?.emoji || '📦'
                 const installInfo = getInstallmentInfo(r, currentMonth)
                 return (
-                  <li key={r.id} className={`p-4 flex items-center justify-between gap-3 transition ${isDisabled ? 'opacity-40' : ''}`}>
+                  <li key={r.id} className={`p-4 flex items-center justify-between gap-3 transition animate-fade-in-up ${isDisabled ? 'opacity-40' : ''}`}>
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center flex-shrink-0">
                         <span className="text-base">{displayEmoji}</span>
@@ -546,7 +609,7 @@ export default function FinanceTracker() {
                 const card = t.cardId ? findCard(t.cardId) : null
                 const displayEmoji = t.category === 'outros' && t.customCategoryEmoji ? t.customCategoryEmoji : cat?.emoji || '📦'
                 return (
-                  <li key={`${t.type}-${t.id}`} className="p-4 flex items-center justify-between gap-3">
+                  <li key={`${t.type}-${t.id}`} className="p-4 flex items-center justify-between gap-3 animate-fade-in-up">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-base ${t.type === 'extra' ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-stone-100 dark:bg-stone-800'}`}>
                         {t.type === 'extra' ? <TrendingUp size={16} className="text-emerald-700 dark:text-emerald-400" /> : <span>{displayEmoji}</span>}
@@ -620,6 +683,8 @@ export default function FinanceTracker() {
             <input type="file" accept=".json" ref={fileInputRef} onChange={importBackup} className="hidden" />
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Floating buttons */}
@@ -640,7 +705,7 @@ export default function FinanceTracker() {
       {modal === 'cards' ? (
         <CardsModal onClose={() => setModal(null)} activeCards={data.cards} onToggle={toggleCard} />
       ) : modal === 'incomeHistory' ? (
-        <IncomeHistoryModal onClose={() => setModal(null)} incomeHistory={data.incomeHistory} onRemove={removeIncomeEntry} onEdit={(entry) => { setEditingIncome(entry); setModal(null) }} />
+        <IncomeHistoryModal onClose={() => setModal(null)} incomeHistory={data.incomeHistory} onRemove={(sm) => askConfirm(`Remover renda de ${monthLabel(sm)}?`, 'Remover').then((ok) => { if (ok) removeIncomeEntry(sm) })} onEdit={(entry) => { setEditingIncome(entry); setModal(null) }} />
       ) : modal ? (
         <Modal type={modal} onClose={() => setModal(null)} currentIncome={mainIncome} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => {

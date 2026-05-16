@@ -6,11 +6,11 @@ export default function ConfirmDialog({ state, onConfirm, onCancel }) {
   if (!state) return null
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm overlay-in"
       onClick={onCancel}
     >
       <div
-        className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-6 w-full max-w-sm shadow-xl"
+        className="bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 p-6 w-full max-w-sm shadow-xl sheet-panel"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 mb-1">
