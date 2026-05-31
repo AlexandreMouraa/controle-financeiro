@@ -12,7 +12,7 @@ import * as db from '@/lib/db'
 import { CATEGORIES, THEME_KEY } from '@/lib/constants'
 import {
   formatBRL, monthKey, monthLabel, emptyMonth, shiftMonth, computeMonthSummary,
-  findCategory, findCard, migrateData, getInstallmentInfo,
+  findCategory, findCard, migrateData, getInstallmentInfo, computeGoalProgress,
 } from '@/lib/helpers'
 
 import BankLogo from './BankLogo'
@@ -31,7 +31,7 @@ import EmptyState from './EmptyState'
 export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
   const [data, setData] = useState({
-    monthlyData: {}, recurring: [], goals: {}, disabledRecurring: {}, cards: [], incomeHistory: [],
+    monthlyData: {}, recurring: [], goal: null, disabledRecurring: {}, cards: [], incomeHistory: [],
   })
   const [loaded, setLoaded] = useState(false)
   const [modal, setModal] = useState(null)
@@ -105,9 +105,7 @@ export default function FinanceTracker() {
     variableExpensesTotal, totalExpenses, balance,
   } = computeMonthSummary(data, currentMonth)
   const isRed = balance < 0
-  const goal = data.goals[currentMonth] || 0
-  const saved = Math.max(balance, 0)
-  const goalProgress = goal > 0 ? Math.min(saved / goal, 1) : 0
+  const goalInfo = computeGoalProgress(data, currentMonth)
   const userCards = data.cards.map((id) => findCard(id)).filter(Boolean)
 
   const prevBalance = computeMonthSummary(data, shiftMonth(currentMonth, -1)).balance
@@ -118,7 +116,7 @@ export default function FinanceTracker() {
   const committedPct = totalIncome > 0 ? totalExpenses / totalIncome : 0
   const health = isRed
     ? { label: 'No vermelho', cls: 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300' }
-    : goal > 0 && saved >= goal
+    : goalInfo?.done
     ? { label: 'Meta batida', cls: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' }
     : committedPct >= 0.9
     ? { label: 'Atenção', cls: 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300' }
@@ -128,7 +126,7 @@ export default function FinanceTracker() {
     data.incomeHistory.length > 0 ||
     data.recurring.length > 0 ||
     data.cards.length > 0 ||
-    Object.keys(data.goals).length > 0 ||
+    data.goal != null ||
     Object.values(data.monthlyData).some((m) => m.expenses.length > 0 || m.extras.length > 0)
   const isEmpty = loaded && hasAnyData === false
 
@@ -245,14 +243,25 @@ export default function FinanceTracker() {
     }
   }
 
-  const setGoal = async (amount) => {
-    const prevGoals = data.goals
-    setData((prev) => ({ ...prev, goals: { ...prev.goals, [currentMonth]: amount } }))
-    const { error } = await db.upsertGoal(userIdRef.current, currentMonth, amount)
+  const setGoal = async (goal) => {
+    const prevGoal = data.goal
+    setData((prev) => ({ ...prev, goal }))
+    const { error } = await db.upsertGoal(userIdRef.current, goal)
     if (error) {
       console.error('Erro ao salvar meta:', error)
-      setData((prev) => ({ ...prev, goals: prevGoals }))
+      setData((prev) => ({ ...prev, goal: prevGoal }))
       addToast('Erro ao salvar meta.')
+    }
+  }
+
+  const removeGoal = async () => {
+    const prevGoal = data.goal
+    setData((prev) => ({ ...prev, goal: null }))
+    const { error } = await db.deleteGoal(userIdRef.current)
+    if (error) {
+      console.error('Erro ao remover meta:', error)
+      setData((prev) => ({ ...prev, goal: prevGoal }))
+      addToast('Erro ao remover meta.')
     }
   }
 
@@ -514,32 +523,49 @@ export default function FinanceTracker() {
               <Target size={14} className="text-stone-500 dark:text-stone-400" />
               <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Meta de poupança</p>
             </div>
-            <button onClick={() => setModal('goal')} className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white underline-offset-4 hover:underline">
-              {goal > 0 ? 'Editar' : 'Definir'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setModal('goal')} className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white underline-offset-4 hover:underline">
+                {goalInfo ? 'Editar' : 'Definir'}
+              </button>
+              {goalInfo && (
+                <button
+                  onClick={() => askConfirm('Excluir a meta de poupança?', 'Excluir').then((ok) => { if (ok) removeGoal() })}
+                  className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-500 underline-offset-4 hover:underline"
+                >
+                  Excluir
+                </button>
+              )}
+            </div>
           </div>
-          {goal > 0 ? (
+          {goalInfo ? (
             <div className="flex items-center gap-4">
               <div className="relative flex-shrink-0">
-                <ProgressRing progress={goalProgress} done={goalProgress >= 1} />
+                <ProgressRing progress={goalInfo.progress} done={goalInfo.done} />
                 <span className="absolute inset-0 flex items-center justify-center text-sm font-mono font-semibold">
-                  {Math.round(goalProgress * 100)}%
+                  {Math.round(goalInfo.progress * 100)}%
                 </span>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-2xl font-mono">
-                  {formatBRL(saved)}{' '}
-                  <span className="text-sm font-sans text-stone-500 dark:text-stone-400">de {formatBRL(goal)}</span>
+                  {formatBRL(goalInfo.saved)}{' '}
+                  <span className="text-sm font-sans text-stone-500 dark:text-stone-400">de {formatBRL(goalInfo.totalAmount)}</span>
+                </p>
+                <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5 capitalize">
+                  {goalInfo.months} {goalInfo.months === 1 ? 'mês' : 'meses'} · termina em {monthLabel(goalInfo.endMonth)}
                 </p>
                 <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                  {goalProgress >= 1 ? `Meta batida! Sobraram ${formatBRL(saved - goal)} além da meta.`
-                    : isRed ? 'Feche o vermelho primeiro pra começar a guardar.'
-                    : `Faltam ${formatBRL(goal - saved)} pra fechar a meta.`}
+                  {goalInfo.done
+                    ? `Meta batida! Você juntou ${formatBRL(goalInfo.saved)}. 🎉`
+                    : goalInfo.notStarted
+                    ? `A meta começa em ${monthLabel(goalInfo.startMonth)}.`
+                    : goalInfo.ended
+                    ? `Período encerrado. Você juntou ${formatBRL(goalInfo.saved)} de ${formatBRL(goalInfo.totalAmount)}.`
+                    : `Faltam ${formatBRL(goalInfo.remainingAmount)}${goalInfo.monthsRemaining > 0 ? ` · ${goalInfo.monthsRemaining} ${goalInfo.monthsRemaining === 1 ? 'mês' : 'meses'} restantes (${formatBRL(goalInfo.requiredRate)}/mês)` : ' até o fim do período'}`}
                 </p>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-stone-500 dark:text-stone-400">Sem meta esse mês. Defina um valor pra acompanhar quanto você está conseguindo guardar.</p>
+            <p className="text-sm text-stone-500 dark:text-stone-400">Sem meta definida. Diga quanto quer juntar e em quantos meses — o app acumula o que sobra de cada mês ao longo do período.</p>
           )}
         </div>
 
@@ -739,12 +765,12 @@ export default function FinanceTracker() {
       ) : modal === 'incomeHistory' ? (
         <IncomeHistoryModal onClose={() => setModal(null)} incomeHistory={data.incomeHistory} onRemove={(sm) => askConfirm(`Remover renda de ${monthLabel(sm)}?`, 'Remover').then((ok) => { if (ok) removeIncomeEntry(sm) })} onEdit={(entry) => { setEditingIncome(entry); setModal(null) }} />
       ) : modal ? (
-        <Modal type={modal} onClose={() => setModal(null)} currentIncome={mainIncome} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
+        <Modal type={modal} initialValues={modal === 'goal' ? data.goal : null} onClose={() => setModal(null)} currentIncome={mainIncome} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => {
             if (modal === 'income') setIncomeEntry(payload)
             else if (modal === 'extra') addExtra(payload)
             else if (modal === 'expense') addExpense(payload)
-            else if (modal === 'goal') setGoal(payload.amount)
+            else if (modal === 'goal') setGoal(payload)
             else if (modal === 'recurring') addRecurring(payload)
             setModal(null)
           }}
@@ -752,7 +778,7 @@ export default function FinanceTracker() {
       ) : null}
 
       {editingIncome && (
-        <Modal type="income" initialValues={editingIncome} onClose={() => setEditingIncome(null)} currentIncome={editingIncome.amount} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
+        <Modal type="income" initialValues={editingIncome} onClose={() => setEditingIncome(null)} currentIncome={editingIncome.amount} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => {
             if (editingIncome.startMonth !== payload.startMonth) removeIncomeEntry(editingIncome.startMonth)
             setIncomeEntry(payload)
@@ -762,13 +788,13 @@ export default function FinanceTracker() {
       )}
 
       {editingRecurring && (
-        <Modal type="recurring" initialValues={editingRecurring} onClose={() => setEditingRecurring(null)} currentIncome={mainIncome} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
+        <Modal type="recurring" initialValues={editingRecurring} onClose={() => setEditingRecurring(null)} currentIncome={mainIncome} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => { updateRecurring(editingRecurring.id, payload); setEditingRecurring(null) }}
         />
       )}
 
       {editingTransaction && (
-        <Modal type={editingTransaction.type} initialValues={editingTransaction} onClose={() => setEditingTransaction(null)} currentIncome={mainIncome} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
+        <Modal type={editingTransaction.type} initialValues={editingTransaction} onClose={() => setEditingTransaction(null)} currentIncome={mainIncome} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => {
             if (editingTransaction.type === 'extra') updateExtra(editingTransaction.id, payload)
             else updateExpense(editingTransaction.id, payload)

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { CATEGORIES, CUSTOM_EMOJIS } from '@/lib/constants'
+import { formatBRL, shiftMonth, monthLabel } from '@/lib/helpers'
 import BankLogo from './BankLogo'
 
 export default function Modal({
@@ -10,15 +11,14 @@ export default function Modal({
   onClose,
   onSubmit,
   currentIncome,
-  currentGoal,
   userCards = [],
   initialValues = null,
   currentViewedMonth = '',
 }) {
   const [amount, setAmount] = useState(() => {
+    if (type === 'goal') return initialValues ? String(initialValues.totalAmount) : ''
     if (initialValues) return String(initialValues.amount)
     if (type === 'income' && currentIncome) return String(currentIncome)
-    if (type === 'goal' && currentGoal) return String(currentGoal)
     return ''
   })
   const [description, setDescription] = useState(() => initialValues?.description || '')
@@ -29,6 +29,8 @@ export default function Modal({
   const [numParcelas, setNumParcelas] = useState(() => initialValues?.numParcelas || 2)
   const [customEmoji, setCustomEmoji] = useState(() => initialValues?.customCategoryEmoji || '')
   const [startMonth, setStartMonth] = useState(() => initialValues?.startMonth || currentViewedMonth)
+  const [goalMonths, setGoalMonths] = useState(() => initialValues?.months || 6)
+  const [goalStartMonth, setGoalStartMonth] = useState(() => initialValues?.startMonth || currentViewedMonth)
   const [incomeStartMonth, setIncomeStartMonth] = useState(() =>
     type === 'income' && initialValues?.startMonth ? initialValues.startMonth : currentViewedMonth
   )
@@ -37,14 +39,14 @@ export default function Modal({
     income: initialValues ? 'Editar renda' : 'Renda principal',
     extra: initialValues ? 'Editar ganho extra' : 'Ganho extra',
     expense: initialValues ? 'Editar despesa' : 'Nova despesa',
-    goal: 'Meta de poupança',
+    goal: initialValues ? 'Editar meta' : 'Meta de poupança',
     recurring: initialValues ? 'Editar despesa fixa' : 'Despesa fixa',
   }
   const subtitles = {
     income: 'Vale para esse mês e os seguintes, até a próxima alteração',
     extra: 'Alguém te pagou? Bico? Coloca aqui.',
     expense: 'Tudo o que saiu da conta',
-    goal: 'Quanto você quer guardar este mês',
+    goal: 'Quanto você quer juntar e em quanto tempo',
     recurring: 'Conta automaticamente todo mês',
   }
 
@@ -54,7 +56,7 @@ export default function Modal({
     if (type === 'income') {
       onSubmit({ amount: num, startMonth: incomeStartMonth })
     } else if (type === 'goal') {
-      onSubmit({ amount: num })
+      onSubmit({ totalAmount: num, startMonth: goalStartMonth, months: goalMonths })
     } else if (type === 'extra') {
       if (!description.trim()) return
       onSubmit({ amount: num, description: description.trim(), date })
@@ -114,7 +116,7 @@ export default function Modal({
 
         <div className="space-y-4">
           <div>
-            <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Valor</label>
+            <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">{type === 'goal' ? 'Valor total' : 'Valor'}</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 dark:text-stone-400 text-sm">R$</span>
               <input
@@ -143,6 +145,50 @@ export default function Modal({
                 Esse valor vale a partir desse mês e segue nos próximos, até você registrar outra alteração.
               </p>
             </div>
+          )}
+
+          {type === 'goal' && (
+            <>
+              <div>
+                <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">A partir de</label>
+                <input
+                  type="month"
+                  value={goalStartMonth}
+                  onChange={(e) => setGoalStartMonth(e.target.value)}
+                  className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Em quantos meses</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {[3, 6, 12, 18, 24, 36].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setGoalMonths(p)}
+                      className={`py-2 rounded-xl text-xs transition ${
+                        goalMonths === p
+                          ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
+                          : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                {(() => {
+                  const num = parseFloat(String(amount).replace(',', '.'))
+                  const endLabel = monthLabel(shiftMonth(goalStartMonth, goalMonths - 1))
+                  const pace = !isNaN(num) && num > 0 ? formatBRL(num / goalMonths) : null
+                  return (
+                    <p className="text-xs text-stone-500 dark:text-stone-400 mt-2 capitalize">
+                      Termina em {endLabel}
+                      <span className="lowercase">{pace ? ` · ${pace}/mês pra fechar` : ''}</span>
+                    </p>
+                  )
+                })()}
+              </div>
+            </>
           )}
 
           {showDescription && (

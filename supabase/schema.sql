@@ -66,11 +66,15 @@ create table if not exists public.disabled_recurring (
 );
 
 -- ── goals ─────────────────────────────────────────────────────────
+-- Uma meta por usuário: valor total a juntar ao longo de N meses, a partir
+-- de start_month. O progresso (acumulado mês a mês) é calculado no cliente
+-- em lib/helpers.js (computeGoalProgress).
 create table if not exists public.goals (
-  user_id uuid    not null references auth.users (id) on delete cascade,
-  month   text    not null,
-  amount  numeric not null,
-  primary key (user_id, month)                  -- upsert onConflict: user_id,month
+  user_id      uuid    not null primary key references auth.users (id) on delete cascade,
+  total_amount numeric not null,
+  start_month  text    not null,                -- 'YYYY-MM'
+  months       integer not null,                -- duração em meses
+  created_at   timestamptz not null default now()
 );
 
 -- ── user_cards ────────────────────────────────────────────────────
