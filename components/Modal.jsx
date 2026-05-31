@@ -35,8 +35,8 @@ export default function Modal({
 
   const titles = {
     income: initialValues ? 'Editar renda' : 'Renda principal',
-    extra: 'Ganho extra',
-    expense: 'Nova despesa',
+    extra: initialValues ? 'Editar ganho extra' : 'Ganho extra',
+    expense: initialValues ? 'Editar despesa' : 'Nova despesa',
     goal: 'Meta de poupança',
     recurring: initialValues ? 'Editar despesa fixa' : 'Despesa fixa',
   }

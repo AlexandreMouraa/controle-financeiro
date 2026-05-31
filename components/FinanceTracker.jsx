@@ -37,6 +37,7 @@ export default function FinanceTracker() {
   const [modal, setModal] = useState(null)
   const [editingRecurring, setEditingRecurring] = useState(null)
   const [editingIncome, setEditingIncome] = useState(null)
+  const [editingTransaction, setEditingTransaction] = useState(null)
   const [theme, setTheme] = useState('light')
   const [loggingOut, setLoggingOut] = useState(false)
   const fileInputRef = useRef(null)
@@ -202,6 +203,34 @@ export default function FinanceTracker() {
       console.error('Erro ao remover ganho extra:', error)
       updateMonth((m) => ({ ...m, extras: prev }))
       addToast('Erro ao remover ganho extra.')
+    }
+  }
+
+  const updateExtra = async (id, updates) => {
+    const prev = data.monthlyData[currentMonth]?.extras || []
+    updateMonth((m) => ({
+      ...m,
+      extras: m.extras.map((e) => (e.id === id ? { ...e, ...updates, customCategoryEmoji: updates.customCategoryEmoji } : e)),
+    }))
+    const { error } = await db.updateExtraEntry(userIdRef.current, id, updates)
+    if (error) {
+      console.error('Erro ao atualizar ganho extra:', error)
+      updateMonth((m) => ({ ...m, extras: prev }))
+      addToast('Erro ao atualizar ganho extra.')
+    }
+  }
+
+  const updateExpense = async (id, updates) => {
+    const prev = data.monthlyData[currentMonth]?.expenses || []
+    updateMonth((m) => ({
+      ...m,
+      expenses: m.expenses.map((e) => (e.id === id ? { ...e, ...updates, customCategoryEmoji: updates.customCategoryEmoji } : e)),
+    }))
+    const { error } = await db.updateExpenseEntry(userIdRef.current, id, updates)
+    if (error) {
+      console.error('Erro ao atualizar despesa:', error)
+      updateMonth((m) => ({ ...m, expenses: prev }))
+      addToast('Erro ao atualizar despesa.')
     }
   }
 
@@ -628,6 +657,9 @@ export default function FinanceTracker() {
                       <p className={`text-sm font-semibold whitespace-nowrap ${t.type === 'extra' ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-900 dark:text-stone-100'}`}>
                         {t.type === 'extra' ? '+' : '−'} {formatBRL(t.amount)}
                       </p>
+                      <button onClick={() => setEditingTransaction(t)} className="text-stone-300 dark:text-stone-600 hover:text-stone-700 dark:hover:text-stone-300 p-2 transition" aria-label="Editar">
+                        <Pencil size={14} />
+                      </button>
                       <button onClick={() => t.type === 'extra' ? removeExtra(t.id) : removeExpense(t.id)} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-2 transition" aria-label="Remover">
                         <Trash2 size={14} />
                       </button>
@@ -732,6 +764,16 @@ export default function FinanceTracker() {
       {editingRecurring && (
         <Modal type="recurring" initialValues={editingRecurring} onClose={() => setEditingRecurring(null)} currentIncome={mainIncome} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => { updateRecurring(editingRecurring.id, payload); setEditingRecurring(null) }}
+        />
+      )}
+
+      {editingTransaction && (
+        <Modal type={editingTransaction.type} initialValues={editingTransaction} onClose={() => setEditingTransaction(null)} currentIncome={mainIncome} currentGoal={goal} userCards={userCards} currentViewedMonth={currentMonth}
+          onSubmit={(payload) => {
+            if (editingTransaction.type === 'extra') updateExtra(editingTransaction.id, payload)
+            else updateExpense(editingTransaction.id, payload)
+            setEditingTransaction(null)
+          }}
         />
       )}
 
