@@ -5,6 +5,19 @@ import { CATEGORIES, CUSTOM_EMOJIS } from '@/lib/constants'
 import { formatBRL, shiftMonth, monthLabel } from '@/lib/helpers'
 import BankLogo from './BankLogo'
 
+// Máscara de moeda: digita só números e os centavos vão preenchendo da direita.
+const onlyDigits = (s) => String(s).replace(/\D/g, '')
+const maskBRLInput = (s) => {
+  const d = onlyDigits(s)
+  if (!d) return ''
+  return (parseInt(d, 10) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+const numToMask = (n) => (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const parseMaskBRL = (s) => {
+  const d = onlyDigits(s)
+  return d ? parseInt(d, 10) / 100 : NaN
+}
+
 export default function Modal({
   type,
   onClose,
@@ -15,10 +28,10 @@ export default function Modal({
   currentViewedMonth = '',
 }) {
   const [amount, setAmount] = useState(() => {
-    if (type === 'goal') return initialValues ? String(initialValues.totalAmount) : ''
-    if (type === 'reserve') return initialValues ? String(initialValues.currentAmount) : ''
-    if (initialValues) return String(initialValues.amount)
-    if (type === 'income' && currentIncome) return String(currentIncome)
+    if (type === 'goal') return initialValues ? numToMask(initialValues.totalAmount) : ''
+    if (type === 'reserve') return initialValues ? numToMask(initialValues.currentAmount) : ''
+    if (initialValues) return numToMask(initialValues.amount)
+    if (type === 'income' && currentIncome) return numToMask(currentIncome)
     return ''
   })
   const [description, setDescription] = useState(() => initialValues?.description || '')
@@ -62,7 +75,7 @@ export default function Modal({
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault()
-    const num = parseFloat(String(amount).replace(',', '.'))
+    const num = parseMaskBRL(amount)
     if (isNaN(num) || (type === 'reserve' ? num < 0 : num <= 0)) return
     if (type === 'income') {
       onSubmit({ amount: num, startMonth: incomeStartMonth })
@@ -138,9 +151,9 @@ export default function Modal({
           <label>{amountLabel}</label>
           <input
             className="mono"
-            inputMode="decimal"
+            inputMode="numeric"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => setAmount(maskBRLInput(e.target.value))}
             placeholder="0,00"
             autoFocus={!showDescription}
           />
@@ -167,7 +180,7 @@ export default function Modal({
                 ))}
               </div>
               {(() => {
-                const num = parseFloat(String(amount).replace(',', '.'))
+                const num = parseMaskBRL(amount)
                 const endLabel = monthLabel(shiftMonth(goalStartMonth, goalMonths - 1))
                 const pace = !isNaN(num) && num > 0 ? formatBRL(num / goalMonths) : null
                 return (
