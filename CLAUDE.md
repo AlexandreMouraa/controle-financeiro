@@ -66,3 +66,10 @@ Theme state lives in `FinanceTracker` and each auth page independently. It reads
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
+
+## Supabase — ⚠️ REGRAS OBRIGATÓRIAS
+
+- O banco **deste projeto** é o Supabase chamado **"controleFinanceiro"** (project ref `obokvqgokurrkumwkcmi`). É o único que pode ser tocado.
+- Existe **outro** projeto na mesma conta Supabase (`pnyawwwkasxagrzvvgda`, "AlexandreMouraa's Project") que é de **um cliente** — **NÃO TOCAR**. Nunca rodar SQL, migração, leitura nem qualquer ação nele.
+- **Antes de qualquer ação no Supabase** (SQL, migração, `execute_sql`, `apply_migration`, escrita, mudança de auth/senha, etc.): **sempre confirmar com o usuário primeiro** e deixar explícito em qual projeto a ação vai rodar. Nada de operar no banco sem confirmação.
+- Em caso de dúvida sobre qual projeto, **perguntar** — nunca assumir.
