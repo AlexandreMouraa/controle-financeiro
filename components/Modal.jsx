@@ -36,6 +36,10 @@ export default function Modal({
   const [incomeStartMonth, setIncomeStartMonth] = useState(() =>
     type === 'income' && initialValues?.startMonth ? initialValues.startMonth : currentViewedMonth
   )
+  // Anti-misclick: se o usuário já mexeu em algo, confirmar antes de fechar no clique fora.
+  const [touched, setTouched] = useState(false)
+  const [askDiscard, setAskDiscard] = useState(false)
+  const requestClose = () => (touched ? setAskDiscard(true) : onClose())
 
   const titles = {
     income: initialValues ? 'Editar renda' : 'Renda principal',
@@ -107,8 +111,14 @@ export default function Modal({
     : 'Valor (R$)'
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+    <div className="overlay" onClick={requestClose}>
+      <form
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+        onInput={() => setTouched(true)}
+        onChangeCapture={() => setTouched(true)}
+      >
         <h3>{titles[type]}</h3>
         <div className="sub">{subtitles[type]}</div>
 
@@ -296,6 +306,19 @@ export default function Modal({
           <button type="submit" className="btn-solid">Salvar</button>
         </div>
       </form>
+
+      {askDiscard && (
+        <div className="overlay" style={{ zIndex: 65 }} onClick={(e) => { e.stopPropagation(); setAskDiscard(false) }}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h3>Descartar alterações?</h3>
+            <div className="sub">Você tem mudanças não salvas. Se sair agora, elas serão perdidas.</div>
+            <div className="modal-actions">
+              <button type="button" className="btn-cancel" onClick={() => setAskDiscard(false)}>Continuar editando</button>
+              <button type="button" className="btn-solid" style={{ background: 'var(--debt)' }} onClick={onClose}>Descartar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
