@@ -226,9 +226,9 @@ button { font-family: inherit; }
 /* donut */
 .donut-wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
 .donut { position: relative; flex-shrink: 0; }
-.donut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.donut .center .t { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.donut .center .v { font-family: var(--font-mono); font-size: 16px; font-weight: 600; margin-top: 2px; }
+.donut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 0 16px; }
+.donut .center .t { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.donut .center .v { font-family: var(--font-mono); font-size: 13px; font-weight: 600; margin-top: 2px; letter-spacing: -.02em; line-height: 1.1; }
 .legend { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
 .legend-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
 .legend-row:last-child { border-bottom: none; }

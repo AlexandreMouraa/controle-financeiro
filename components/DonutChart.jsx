@@ -1,6 +1,6 @@
 import { formatBRL } from '@/lib/helpers'
 
-export default function DonutChart({ data, total, size = 132 }) {
+export default function DonutChart({ data, total, size = 148 }) {
   const r = size / 2 - 9
   const cx = size / 2
   const cy = size / 2
