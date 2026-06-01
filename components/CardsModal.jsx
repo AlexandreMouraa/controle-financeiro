@@ -1,50 +1,36 @@
 'use client'
 
-import { X, Check } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { DEFAULT_CARDS } from '@/lib/constants'
 import BankLogo from './BankLogo'
 
 export default function CardsModal({ onClose, activeCards, onToggle }) {
   return (
-    <div
-      className="fixed inset-0 bg-stone-900/40 dark:bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overlay-in"
-      onClick={onClose}
-    >
-      <div
-        className="bg-stone-50 dark:bg-stone-950 rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border border-transparent dark:border-stone-800 sheet-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h3 className="text-2xl font-medium tracking-tight text-stone-900 dark:text-stone-100">Seus cartões</h3>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Toque pra ativar/desativar</p>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 flex items-center justify-center flex-shrink-0" aria-label="Fechar">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Seus cartões</h3>
+        <div className="sub">Toque pra ativar ou desativar.</div>
+        <div className="chip-select" style={{ gap: 9 }}>
           {DEFAULT_CARDS.map((card) => {
             const active = activeCards.includes(card.id)
             return (
               <button
                 key={card.id}
+                type="button"
+                className={active ? 'sel' : ''}
                 onClick={() => onToggle(card.id)}
-                className={`pl-2 pr-3 py-2.5 rounded-xl text-sm flex items-center gap-2 transition border-2 ${
-                  active ? 'text-white border-transparent' : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                }`}
-                style={active ? { backgroundColor: card.color, borderColor: card.color } : {}}
+                style={{ padding: '8px 13px' }}
               >
-                <BankLogo id={card.id} size={26} />
-                <span className="truncate text-left flex-1">{card.name}</span>
-                {active && <Check size={14} className="flex-shrink-0" />}
+                <BankLogo id={card.id} size={20} />
+                <span>{card.name}</span>
+                {active && <Check size={14} />}
               </button>
             )
           })}
         </div>
-        <button onClick={onClose} className="w-full bg-stone-900 dark:bg-white text-white dark:text-stone-900 py-3 rounded-full font-medium hover:bg-stone-700 dark:hover:bg-stone-200 transition mt-5">
-          Pronto
-        </button>
+        <div className="modal-actions">
+          <button type="button" className="btn-solid" onClick={onClose}>Pronto</button>
+        </div>
       </div>
     </div>
   )

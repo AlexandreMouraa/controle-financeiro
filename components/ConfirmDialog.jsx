@@ -5,30 +5,24 @@ import { AlertTriangle } from 'lucide-react'
 export default function ConfirmDialog({ state, onConfirm, onCancel }) {
   if (!state) return null
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm overlay-in"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-stone-800 p-6 w-full max-w-sm shadow-xl sheet-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
-            <AlertTriangle size={16} className="text-amber-700 dark:text-amber-400" />
+    <div className="overlay" style={{ zIndex: 70 }} onClick={onCancel}>
+      <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 9, flexShrink: 0, display: 'grid', placeItems: 'center',
+            background: 'var(--warn-bg)', color: 'var(--warn)',
+          }}>
+            <AlertTriangle size={16} />
           </div>
-          <p className="text-sm text-stone-700 dark:text-stone-300">{state.message}</p>
+          <p style={{ fontSize: 14, color: 'var(--ink-soft)' }}>{state.message}</p>
         </div>
-        <div className="flex gap-2 mt-6">
+        <div className="modal-actions">
+          <button type="button" className="btn-cancel" onClick={onCancel}>Cancelar</button>
           <button
-            onClick={onCancel}
-            className="flex-1 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-900 dark:text-stone-100 py-2.5 rounded-full text-sm font-medium transition"
-          >
-            Cancelar
-          </button>
-          <button
+            type="button"
+            className="btn-solid"
+            style={{ background: 'var(--debt)' }}
             onClick={onConfirm}
-            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-full text-sm font-medium transition"
           >
             {state.confirmLabel || 'Confirmar'}
           </button>

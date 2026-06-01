@@ -13,7 +13,7 @@ import { CATEGORIES, THEME_KEY } from '@/lib/constants'
 import {
   formatBRL, monthKey, monthLabel, emptyMonth, shiftMonth, computeMonthSummary,
   findCategory, findCard, migrateData, getInstallmentInfo, computeGoalProgress,
-  computeInsights, computeReserveProgress, spendByCategory,
+  computeInsights, computeReserveProgress,
 } from '@/lib/helpers'
 
 import BankLogo from './BankLogo'
@@ -24,10 +24,15 @@ import ToastContainer from './Toast'
 import ConfirmDialog from './ConfirmDialog'
 import ProgressRing from './ProgressRing'
 import DonutChart from './DonutChart'
-import CountUp from './CountUp'
 import Sparkline from './Sparkline'
 import DashboardSkeleton from './DashboardSkeleton'
 import EmptyState from './EmptyState'
+
+const splitBRL = (n) => {
+  const s = Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const [reais, cents] = s.split(',')
+  return { reais, cents }
+}
 
 export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
@@ -117,17 +122,18 @@ export default function FinanceTracker() {
 
   const prevBalance = computeMonthSummary(data, shiftMonth(currentMonth, -1)).balance
   const balanceDelta = balance - prevBalance
+  const prevMonthShort = monthLabel(shiftMonth(currentMonth, -1)).split(' de ')[0]
   const sparkValues = Array.from({ length: 6 }, (_, i) =>
     computeMonthSummary(data, shiftMonth(currentMonth, i - 5)).balance
   )
   const committedPct = totalIncome > 0 ? totalExpenses / totalIncome : 0
   const health = isRed
-    ? { label: 'No vermelho', cls: 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300' }
+    ? { label: 'No vermelho', cls: 'debt' }
     : goalInfo?.done
-    ? { label: 'Meta batida', cls: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' }
+    ? { label: 'Meta batida', cls: '' }
     : committedPct >= 0.9
-    ? { label: 'Atenção', cls: 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300' }
-    : { label: 'Tranquilo', cls: 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' }
+    ? { label: 'Atenção', cls: 'warn' }
+    : { label: 'Tranquilo', cls: '' }
 
   const hasAnyData =
     data.incomeHistory.length > 0 ||
@@ -155,7 +161,7 @@ export default function FinanceTracker() {
     .map(([catId, limit]) => {
       const cat = findCategory(catId)
       const spent = expensesByCategory[catId] || 0
-      return { catId, label: cat?.label || 'Outros', emoji: cat?.emoji || '📦', color: cat?.color || '#78716c', limit, spent, pct: limit > 0 ? spent / limit : 0 }
+      return { catId, label: cat?.label || 'Outros', emoji: cat?.emoji || '📦', color: cat?.color || '#8a8378', limit, spent, pct: limit > 0 ? spent / limit : 0 }
     })
     .sort((a, b) => b.pct - a.pct)
   const unbudgetedCategories = CATEGORIES.filter((c) => !(c.id in data.budgets))
@@ -462,566 +468,430 @@ export default function FinanceTracker() {
 
   if (!loaded) return <DashboardSkeleton />
 
-  // ── Blocos reaproveitados nas abas ───────────────────────────────
-
-  const saldoCard = (
-    <div className={`rounded-3xl p-6 mb-3 border ${isRed ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900/40' : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/40'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400 mb-2">{isRed ? 'No vermelho' : 'Saldo do mês'}</p>
-          <p className={`text-5xl mb-2 font-mono tracking-tight ${isRed ? 'text-rose-900 dark:text-rose-300' : 'text-emerald-900 dark:text-emerald-300'}`}>
-            <CountUp value={balance} format={formatBRL} />
-          </p>
-        </div>
-        <div className="flex-shrink-0 pt-1">
-          <Sparkline values={sparkValues} />
-        </div>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-sm text-stone-600 dark:text-stone-400">{formatBRL(totalIncome)} entrou · {formatBRL(totalExpenses)} saiu</p>
-        {balanceDelta !== 0 && (
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${balanceDelta > 0 ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300'}`}>
-            {balanceDelta > 0 ? '↑' : '↓'} {formatBRL(Math.abs(balanceDelta))} vs. {monthLabel(shiftMonth(currentMonth, -1)).split(' de ')[0]}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-
-  const insightsCard = insights.length > 0 && (
-    <div className="space-y-2 mb-3">
-      {insights.map((ins) => {
-        const tone = {
-          good: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300',
-          warn: 'bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900/40 text-amber-800 dark:text-amber-300',
-          bad: 'bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900/40 text-rose-800 dark:text-rose-300',
-          info: 'bg-stone-50 dark:bg-stone-900 border-stone-200 dark:border-stone-800 text-stone-700 dark:text-stone-300',
-        }[ins.tone] || ''
-        return (
-          <div key={ins.id} className={`flex items-start gap-2.5 rounded-2xl border px-4 py-3 animate-fade-in-up ${tone}`}>
-            <Lightbulb size={15} className="flex-shrink-0 mt-0.5" />
-            <p className="text-sm leading-snug">{ins.text}</p>
-          </div>
-        )
-      })}
-    </div>
-  )
-
-  const entradasSaidasCard = (
-    <div className="grid grid-cols-2 gap-3 mb-3">
-      <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800">
-        <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400 text-[10px] uppercase tracking-[0.15em] mb-2"><TrendingUp size={12} /> Entradas</div>
-        <p className="text-2xl font-mono"><CountUp value={totalIncome} format={formatBRL} /></p>
-        <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Renda + {monthData.extras.length} {monthData.extras.length === 1 ? 'extra' : 'extras'}</p>
-      </div>
-      <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800">
-        <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400 text-[10px] uppercase tracking-[0.15em] mb-2"><TrendingDown size={12} /> Saídas</div>
-        <p className="text-2xl font-mono"><CountUp value={totalExpenses} format={formatBRL} /></p>
-        <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">{activeRecurring.length} fixas + {monthData.expenses.length} variáveis</p>
-      </div>
-    </div>
-  )
-
-  const committedCard = totalIncome > 0 && (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800 mb-3">
-      <div className="flex items-center justify-between mb-2 text-xs">
-        <span className="text-stone-500 dark:text-stone-400">Renda comprometida</span>
-        <span className="font-medium">{Math.round(committedPct * 100)}%</span>
-      </div>
-      <div className="h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${committedPct >= 1 ? 'bg-rose-600' : committedPct >= 0.9 ? 'bg-amber-500' : 'bg-emerald-600'}`}
-          style={{ width: `${Math.min(committedPct, 1) * 100}%` }}
-        />
-      </div>
-      <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
-        {committedPct >= 1
-          ? 'Você gastou mais do que ganhou este mês.'
-          : `Sobram ${formatBRL(totalIncome - totalExpenses)} da sua renda.`}
-      </p>
-    </div>
-  )
-
-  const chartCard = chartData.length > 0 && (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-5 mb-3">
-      <div className="flex items-center gap-2 mb-4"><BarChart3 size={14} className="text-stone-500 dark:text-stone-400" /><p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Gastos por categoria</p></div>
-      <div className="flex flex-col sm:flex-row items-center gap-5">
-        <div className="relative flex-shrink-0">
-          <DonutChart data={chartData} total={totalExpenses} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500">Total</span>
-            <span className="text-sm font-mono font-semibold">{formatBRL(totalExpenses)}</span>
-          </div>
-        </div>
-        <ul className="flex-1 w-full space-y-2 min-w-0">
-          {chartData.map((c) => {
-            const pct = Math.round((c.value / totalExpenses) * 100)
-            return (
-              <li key={c.id} className="flex items-center gap-2 text-sm">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
-                <span className="flex-shrink-0">{c.emoji}</span>
-                <span className="text-stone-700 dark:text-stone-300 truncate flex-1">{c.label}</span>
-                <span className="text-xs text-stone-400 dark:text-stone-500 flex-shrink-0">{pct}%</span>
-                <span className="font-medium text-stone-900 dark:text-stone-100 whitespace-nowrap">{formatBRL(c.value)}</span>
-              </li>
-            )
-          })}
-        </ul>
-      </div>
-    </div>
-  )
-
-  const metaCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 border border-stone-200 dark:border-stone-800 mb-3">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Target size={14} className="text-stone-500 dark:text-stone-400" />
-          <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Meta de poupança</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setModal('goal')} className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white underline-offset-4 hover:underline">
-            {goalInfo ? 'Editar' : 'Definir'}
-          </button>
-          {goalInfo && (
-            <button
-              onClick={() => askConfirm('Excluir a meta de poupança?', 'Excluir').then((ok) => { if (ok) removeGoal() })}
-              className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-500 underline-offset-4 hover:underline"
-            >
-              Excluir
-            </button>
-          )}
-        </div>
-      </div>
-      {goalInfo ? (
-        <div className="flex items-center gap-4">
-          <div className="relative flex-shrink-0">
-            <ProgressRing progress={goalInfo.progress} done={goalInfo.done} />
-            <span className="absolute inset-0 flex items-center justify-center text-sm font-mono font-semibold">
-              {Math.round(goalInfo.progress * 100)}%
-            </span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-2xl font-mono">
-              {formatBRL(goalInfo.saved)}{' '}
-              <span className="text-sm font-sans text-stone-500 dark:text-stone-400">de {formatBRL(goalInfo.totalAmount)}</span>
-            </p>
-            <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5 capitalize">
-              {goalInfo.months} {goalInfo.months === 1 ? 'mês' : 'meses'} · termina em {monthLabel(goalInfo.endMonth)}
-            </p>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-              {goalInfo.done
-                ? `Meta batida! Você juntou ${formatBRL(goalInfo.saved)}. 🎉`
-                : goalInfo.notStarted
-                ? `A meta começa em ${monthLabel(goalInfo.startMonth)}.`
-                : goalInfo.ended
-                ? `Período encerrado. Você juntou ${formatBRL(goalInfo.saved)} de ${formatBRL(goalInfo.totalAmount)}.`
-                : `Faltam ${formatBRL(goalInfo.remainingAmount)}${goalInfo.monthsRemaining > 0 ? ` · ${goalInfo.monthsRemaining} ${goalInfo.monthsRemaining === 1 ? 'mês' : 'meses'} restantes (${formatBRL(goalInfo.requiredRate)}/mês)` : ' até o fim do período'}`}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-stone-500 dark:text-stone-400">Sem meta definida. Diga quanto quer juntar e em quantos meses — o app acumula o que sobra de cada mês ao longo do período.</p>
-      )}
-    </div>
-  )
-
-  const fixasCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 mb-3 overflow-hidden">
-      <div className="p-5 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1"><Repeat size={14} className="text-stone-500 dark:text-stone-400" /><p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Despesas fixas</p></div>
-          <p className="text-xl font-mono">{formatBRL(recurringTotal)}</p>
-          <p className="text-xs text-stone-500 dark:text-stone-400">{activeRecurring.length} de {data.recurring.length} ativas neste mês</p>
-        </div>
-        <button onClick={() => setModal('recurring')} className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 text-xs rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition flex items-center gap-1">
-          <Plus size={12} /> Adicionar
-        </button>
-      </div>
-      {data.recurring.length > 0 ? (
-        <ul className="divide-y divide-stone-100 dark:divide-stone-800 border-t border-stone-100 dark:border-stone-800">
-          {data.recurring.map((r) => {
-            const cat = findCategory(r.category)
-            const card = r.cardId ? findCard(r.cardId) : null
-            const isDisabled = disabledIds.includes(r.id)
-            const displayEmoji = r.category === 'outros' && r.customCategoryEmoji ? r.customCategoryEmoji : cat?.emoji || '📦'
-            const installInfo = getInstallmentInfo(r, currentMonth)
-            return (
-              <li key={r.id} className={`p-4 flex items-center justify-between gap-3 transition animate-fade-in-up ${isDisabled ? 'opacity-40' : ''}`}>
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center flex-shrink-0">
-                    <span className="text-base">{displayEmoji}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium truncate ${isDisabled ? 'line-through' : ''}`}>{r.description}</p>
-                    <p className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5 flex-wrap">
-                      <span>{cat?.label || 'Outros'}</span>
-                      {installInfo && (<><span>·</span><span className={installInfo.remaining <= 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}>{installInfo.total}x · {installInfo.remaining > 0 ? `${installInfo.remaining} restantes` : 'Quitado'}</span></>)}
-                      {r.dueDay && (() => {
-                        const live = isCurrentRealMonth && !isDisabled
-                        const diff = r.dueDay - todayDay
-                        const overdue = live && diff < 0
-                        const dueToday = live && diff === 0
-                        const soon = live && diff > 0 && diff <= 5
-                        const cls = overdue ? 'text-rose-600 dark:text-rose-400 font-medium' : (dueToday || soon) ? 'text-amber-600 dark:text-amber-400 font-medium' : ''
-                        const txt = overdue ? `venceu dia ${r.dueDay}` : dueToday ? 'vence hoje' : soon ? `vence em ${diff} ${diff === 1 ? 'dia' : 'dias'}` : `vence dia ${r.dueDay}`
-                        return (<><span>·</span><span className={`flex items-center gap-1 ${cls}`}><CalendarClock size={11} />{txt}</span></>)
-                      })()}
-                      {card && (<><span>·</span><BankLogo id={card.id} size={14} /><span>{card.name}</span></>)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <p className="text-sm font-semibold whitespace-nowrap">{formatBRL(r.amount)}</p>
-                  <button onClick={() => toggleRecurringForMonth(r.id)} className={`text-[10px] px-2.5 py-1 rounded-full transition font-medium ${isDisabled ? 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/60'}`} title={isDisabled ? 'Ativar este mês' : 'Pular este mês'}>
-                    {isDisabled ? 'OFF' : 'ON'}
-                  </button>
-                  <button onClick={() => setEditingRecurring(r)} className="text-stone-300 dark:text-stone-600 hover:text-stone-700 dark:hover:text-stone-300 p-1.5 transition" aria-label="Editar"><Pencil size={13} /></button>
-                  <button onClick={() => askConfirm(`Remover "${r.description}" das despesas fixas?`, 'Remover').then((ok) => { if (ok) removeRecurring(r.id) })} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-1.5 transition" aria-label="Remover"><Trash2 size={13} /></button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      ) : (
-        <p className="px-5 pb-5 text-xs text-stone-500 dark:text-stone-400">Cadastre coisas como aluguel, internet, assinaturas. Cada uma conta automaticamente todo mês.</p>
-      )}
-    </div>
-  )
-
-  const movimentacoesCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 overflow-hidden mb-3">
-      <div className="p-5 border-b border-stone-100 dark:border-stone-800">
-        <h3 className="text-xl font-medium tracking-tight">Movimentações do mês</h3>
-        <p className="text-xs text-stone-500 dark:text-stone-400">Ganhos extras e despesas variáveis</p>
-      </div>
-      {allTransactions.length === 0 ? (
-        <div className="p-10 text-center">
-          <p className="text-stone-400 dark:text-stone-500 text-sm">Ainda nada por aqui.</p>
-          <p className="text-stone-400 dark:text-stone-500 text-xs mt-1">Use o botão + pra começar.</p>
-        </div>
-      ) : (
-        <ul className="divide-y divide-stone-100 dark:divide-stone-800">
-          {allTransactions.map((t) => {
-            const cat = findCategory(t.category)
-            const card = t.cardId ? findCard(t.cardId) : null
-            const displayEmoji = t.category === 'outros' && t.customCategoryEmoji ? t.customCategoryEmoji : cat?.emoji || '📦'
-            return (
-              <li key={`${t.type}-${t.id}`} className="p-4 flex items-center justify-between gap-3 animate-fade-in-up">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-base ${t.type === 'extra' ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-stone-100 dark:bg-stone-800'}`}>
-                    {t.type === 'extra' ? <TrendingUp size={16} className="text-emerald-700 dark:text-emerald-400" /> : <span>{displayEmoji}</span>}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{t.description}</p>
-                    <p className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5 flex-wrap">
-                      <span>{new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
-                      {t.type === 'expense' && (<><span>·</span><span>{cat?.label || 'Outros'}</span></>)}
-                      {t.type === 'extra' && (<><span>·</span><span>ganho extra</span></>)}
-                      {card && (<><span>·</span><BankLogo id={card.id} size={14} /><span>{card.name}</span></>)}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <p className={`text-sm font-semibold whitespace-nowrap ${t.type === 'extra' ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-900 dark:text-stone-100'}`}>
-                    {t.type === 'extra' ? '+' : '−'} {formatBRL(t.amount)}
-                  </p>
-                  <button onClick={() => setEditingTransaction(t)} className="text-stone-300 dark:text-stone-600 hover:text-stone-700 dark:hover:text-stone-300 p-2 transition" aria-label="Editar">
-                    <Pencil size={14} />
-                  </button>
-                  <button onClick={() => t.type === 'extra' ? removeExtra(t.id) : removeExpense(t.id)} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-2 transition" aria-label="Remover">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
-  )
-
-  const rendaCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800 mb-3 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Renda principal</p>
-        <p className="text-xl font-mono">{formatBRL(mainIncome)}</p>
-        {data.incomeHistory.length > 1 && (
-          <button onClick={() => setModal('incomeHistory')} className="text-[11px] text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white underline-offset-4 hover:underline mt-0.5">
-            {data.incomeHistory.length} alterações no histórico
-          </button>
-        )}
-      </div>
-      <button onClick={() => setModal('income')} className="px-4 py-2 bg-stone-900 dark:bg-white text-white dark:text-stone-900 text-sm rounded-full hover:bg-stone-700 dark:hover:bg-stone-200 transition flex-shrink-0">
-        {mainIncome > 0 ? 'Editar' : 'Definir'}
-      </button>
-    </div>
-  )
-
-  const reservaCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 border border-stone-200 dark:border-stone-800 mb-3">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Shield size={14} className="text-stone-500 dark:text-stone-400" />
-          <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Reserva de emergência</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setModal('reserve')} className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white underline-offset-4 hover:underline">
-            {reserveInfo ? 'Editar' : 'Definir'}
-          </button>
-          {reserveInfo && (
-            <button
-              onClick={() => askConfirm('Excluir a reserva de emergência?', 'Excluir').then((ok) => { if (ok) removeReserve() })}
-              className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-500 underline-offset-4 hover:underline"
-            >
-              Excluir
-            </button>
-          )}
-        </div>
-      </div>
-      {reserveInfo ? (
-        <div className="flex items-center gap-4">
-          <div className="relative flex-shrink-0">
-            <ProgressRing progress={reserveInfo.progress} done={reserveInfo.done} />
-            <span className="absolute inset-0 flex items-center justify-center text-sm font-mono font-semibold">
-              {Math.round(reserveInfo.progress * 100)}%
-            </span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-2xl font-mono">
-              {formatBRL(reserveInfo.currentAmount)}{' '}
-              <span className="text-sm font-sans text-stone-500 dark:text-stone-400">de {formatBRL(reserveInfo.target)}</span>
-            </p>
-            <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5">
-              Meta: {reserveInfo.targetMonths} {reserveInfo.targetMonths === 1 ? 'mês' : 'meses'} de despesa fixa ({formatBRL(reserveInfo.monthlyNeed)}/mês)
-            </p>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-              {reserveInfo.done
-                ? `Reserva completa! Cobre ${reserveInfo.targetMonths} ${reserveInfo.targetMonths === 1 ? 'mês' : 'meses'}. 🛟`
-                : reserveInfo.monthlyNeed > 0
-                ? `Cobre ${reserveInfo.monthsCovered.toFixed(1)} ${reserveInfo.monthsCovered === 1 ? 'mês' : 'meses'} hoje · faltam ${formatBRL(reserveInfo.remaining)}`
-                : 'Cadastre suas despesas fixas pra calcular a meta da reserva.'}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-stone-500 dark:text-stone-400">Sem reserva definida. Guarde o equivalente a alguns meses de despesa fixa pra emergências (perda de renda, imprevisto). Diga quanto já tem e quantos meses quer cobrir.</p>
-      )}
-    </div>
-  )
-
-  const orcamentosCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 mb-3 overflow-hidden">
-      <div className="p-5 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1"><Wallet size={14} className="text-stone-500 dark:text-stone-400" /><p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Orçamentos</p></div>
-          <p className="text-xl font-mono">{budgetList.length} {budgetList.length === 1 ? 'categoria' : 'categorias'}</p>
-          <p className="text-xs text-stone-500 dark:text-stone-400">Defina um teto mensal e acompanhe quanto já gastou</p>
-        </div>
-        {unbudgetedCategories.length > 0 && (
-          <button onClick={() => setModal('budget')} className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 text-xs rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition flex items-center gap-1">
-            <Plus size={12} /> Adicionar
-          </button>
-        )}
-      </div>
-      {budgetList.length > 0 ? (
-        <ul className="divide-y divide-stone-100 dark:divide-stone-800 border-t border-stone-100 dark:border-stone-800">
-          {budgetList.map((b) => {
-            const over = b.spent > b.limit
-            const near = !over && b.pct >= 0.8
-            const barCls = over ? 'bg-rose-600' : near ? 'bg-amber-500' : 'bg-emerald-600'
-            return (
-              <li key={b.catId} className="p-4 animate-fade-in-up">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base">{b.emoji}</span>
-                    <span className="text-sm font-medium truncate">{b.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <span className={`text-sm font-mono ${over ? 'text-rose-600 dark:text-rose-400' : 'text-stone-900 dark:text-stone-100'}`}>
-                      {formatBRL(b.spent)}
-                    </span>
-                    <span className="text-xs text-stone-400 dark:text-stone-500">/ {formatBRL(b.limit)}</span>
-                    <button onClick={() => setEditingBudget({ category: b.catId, amount: b.limit })} className="text-stone-300 dark:text-stone-600 hover:text-stone-700 dark:hover:text-stone-300 p-1.5 transition" aria-label="Editar"><Pencil size={13} /></button>
-                    <button onClick={() => askConfirm(`Remover o orçamento de ${b.label}?`, 'Remover').then((ok) => { if (ok) removeBudget(b.catId) })} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-1.5 transition" aria-label="Remover"><Trash2 size={13} /></button>
-                  </div>
-                </div>
-                <div className="h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${barCls}`} style={{ width: `${Math.min(b.pct, 1) * 100}%` }} />
-                </div>
-                <p className={`text-xs mt-1.5 ${over ? 'text-rose-600 dark:text-rose-400' : near ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'}`}>
-                  {over
-                    ? `Passou ${formatBRL(b.spent - b.limit)} do teto.`
-                    : `Sobram ${formatBRL(b.limit - b.spent)} este mês.`}
-                </p>
-              </li>
-            )
-          })}
-        </ul>
-      ) : (
-        <p className="px-5 pb-5 text-xs text-stone-500 dark:text-stone-400">Defina tetos por categoria (ex: Alimentação R$800) e o app mostra uma barra de quanto você já comprometeu no mês.</p>
-      )}
-    </div>
-  )
-
-  const cartoesCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 mb-3 overflow-hidden">
-      <div className="p-5 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1"><CreditCard size={14} className="text-stone-500 dark:text-stone-400" /><p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Cartões</p></div>
-          <p className="text-xl font-mono">{userCards.length} {userCards.length === 1 ? 'cartão' : 'cartões'}</p>
-          <p className="text-xs text-stone-500 dark:text-stone-400">Use ao lançar despesas pra ver onde tá indo a grana</p>
-        </div>
-        <button onClick={() => setModal('cards')} className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 text-xs rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition flex items-center gap-1">
-          <Plus size={12} /> Gerenciar
-        </button>
-      </div>
-      {userCards.length > 0 ? (
-        <div className="px-5 pb-5 flex flex-wrap gap-2">
-          {userCards.map((card) => (
-            <div key={card.id} className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full text-xs font-medium border bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200">
-              <BankLogo id={card.id} size={20} />{card.name}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="px-5 pb-5 text-xs text-stone-500 dark:text-stone-400">Cadastre os bancos/cartões que você usa (Nubank, Santander, C6, etc).</p>
-      )}
-    </div>
-  )
-
-  const backupCard = (
-    <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-5 mb-3">
-      <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 mb-1">Backup completo</p>
-      <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">Salva tudo num arquivo JSON. Útil pra mover de PC ou guardar uma cópia segura.</p>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <button onClick={exportBackup} className="flex-1 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-900 dark:text-stone-100 py-2.5 rounded-full text-sm font-medium transition flex items-center justify-center gap-2">
-          <Download size={14} /> Salvar backup
-        </button>
-        <button onClick={() => fileInputRef.current?.click()} className="flex-1 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-900 dark:text-stone-100 py-2.5 rounded-full text-sm font-medium transition flex items-center justify-center gap-2">
-          <Upload size={14} /> Restaurar backup
-        </button>
-        <input type="file" accept=".json" ref={fileInputRef} onChange={importBackup} className="hidden" />
-      </div>
-    </div>
-  )
+  const hero = splitBRL(balance)
+  const insightIcon = { good: Lightbulb, warn: TrendingUp, bad: TrendingDown, info: Lightbulb }
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 transition-colors">
-      <div className="max-w-5xl mx-auto px-5 py-6 pb-28">
+    <div className="wrap">
+      {/* top bar */}
+      <header className="topbar reveal">
+        <div className="brand">
+          <span className="logo"><span className="dot" />Controle</span>
+          {!isEmpty && <span className={`status-pill ${health.cls}`}>{health.label}</span>}
+        </div>
+        <div className="topbar-right">
+          <button className="icon-btn" title="Tema" onClick={toggleTheme} aria-label="Alternar tema">
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+          <button className="icon-btn" title="Sair" onClick={handleLogout} disabled={loggingOut} aria-label="Sair">
+            <LogOut size={17} />
+          </button>
+        </div>
+      </header>
 
-        {/* Header */}
-        <header className="mb-6">
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-xs uppercase tracking-[0.2em] text-stone-500 dark:text-stone-400">Controle</p>
-                {!isEmpty && (
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${health.cls}`}>
-                    {health.label}
-                  </span>
-                )}
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-light tracking-tight">
-                Suas <em className="not-italic font-semibold">finanças</em> do mês
-              </h1>
-            </div>
-            <div className="flex flex-col items-end gap-3 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleTheme}
-                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-stone-700 dark:text-stone-300"
-                  aria-label="Alternar tema"
-                >
-                  {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
-                </button>
-                <button
-                  onClick={handleLogout}
-                  disabled={loggingOut}
-                  className="w-7 h-7 rounded-full flex items-center justify-center bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-stone-700 dark:text-stone-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Sair"
-                >
-                  <LogOut size={13} />
-                </button>
-              </div>
-              <div className="flex items-center gap-1 bg-white dark:bg-stone-900 rounded-full p-1 border border-stone-200 dark:border-stone-800">
-                <button onClick={() => changeMonth(-1)} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 dark:hover:bg-stone-800 transition" aria-label="Mês anterior">
-                  <ChevronLeft size={16} />
-                </button>
-                <p className="text-sm capitalize font-medium px-1.5 whitespace-nowrap">{monthLabel(currentMonth)}</p>
-                <button onClick={() => changeMonth(1)} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 dark:hover:bg-stone-800 transition" aria-label="Próximo mês">
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {!isEmpty && (
-            <div className="flex items-center gap-6 border-b border-stone-200 dark:border-stone-800">
-              {[['panorama', 'Panorama'], ['ajustes', 'Ajustes']].map(([id, label]) => (
-                <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  className={`pb-2.5 -mb-px text-sm border-b-2 transition ${tab === id ? 'border-emerald-600 dark:border-emerald-500 text-stone-900 dark:text-white font-medium' : 'border-transparent text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </header>
-
-        {isEmpty ? (
-          <EmptyState onAddIncome={() => setModal('income')} onAddExpense={() => setModal('expense')} />
-        ) : tab === 'panorama' ? (
-          <div className="grid lg:grid-cols-2 gap-x-3 items-start">
-            <div>
-              {saldoCard}
-              {insightsCard}
-              {entradasSaidasCard}
-              {committedCard}
-              {chartCard}
-              {metaCard}
-            </div>
-            <div>
-              {fixasCard}
-              {movimentacoesCard}
-            </div>
-          </div>
-        ) : (
-          <div className="grid lg:grid-cols-2 gap-x-3 items-start">
-            <div>
-              {rendaCard}
-              {reservaCard}
-              {orcamentosCard}
-            </div>
-            <div>
-              {cartoesCard}
-              {backupCard}
-            </div>
-          </div>
-        )}
+      {/* masthead */}
+      <div className="masthead reveal" style={{ animationDelay: '.04s' }}>
+        <h1>Suas <em>finanças</em><br />do mês</h1>
+        <div className="month-nav">
+          <button className="arrow" onClick={() => changeMonth(-1)} aria-label="Mês anterior"><ChevronLeft size={18} /></button>
+          <span className="label">{monthLabel(currentMonth)}</span>
+          <button className="arrow" onClick={() => changeMonth(1)} aria-label="Próximo mês"><ChevronRight size={18} /></button>
+        </div>
       </div>
 
-      {/* FAB — adicionar movimentação */}
       {!isEmpty && (
-        <>
-          {fabOpen && <div className="fixed inset-0 z-30" onClick={() => setFabOpen(false)} />}
-          <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
-            {fabOpen && (
+        <nav className="tabs reveal" style={{ animationDelay: '.08s' }}>
+          <button className={'tab' + (tab === 'panorama' ? ' active' : '')} onClick={() => setTab('panorama')}>Panorama</button>
+          <button className={'tab' + (tab === 'ajustes' ? ' active' : '')} onClick={() => setTab('ajustes')}>Ajustes</button>
+        </nav>
+      )}
+
+      {isEmpty ? (
+        <div style={{ marginTop: 24 }}>
+          <EmptyState onAddIncome={() => setModal('income')} onAddExpense={() => setModal('expense')} />
+        </div>
+      ) : tab === 'panorama' ? (
+        <div className="grid">
+          {/* ---------- LEFT ---------- */}
+          <div className="col">
+            {/* hero saldo */}
+            <section className="card hero reveal" style={{ animationDelay: '.12s' }}>
+              <div className="eyebrow" style={{ marginBottom: 14 }}>{isRed ? 'No vermelho' : 'Saldo do mês'}</div>
+              <div className="hero-row">
+                <div>
+                  <div className={'amount' + (isRed ? ' debt' : '')}>
+                    <span className="cur">R$</span>
+                    <span>{isRed ? '−' : ''}{hero.reais}<span className="cents">,{hero.cents}</span></span>
+                  </div>
+                  <div className="hero-sub">
+                    <span><b>{formatBRL(totalIncome)}</b> entrou</span>
+                    <span style={{ color: 'var(--faint)' }}>·</span>
+                    <span><b>{formatBRL(totalExpenses)}</b> saiu</span>
+                    {balanceDelta !== 0 && (
+                      <span className={'delta ' + (balanceDelta > 0 ? 'up' : 'down')}>
+                        {balanceDelta > 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                        {formatBRL(Math.abs(balanceDelta))} vs. {prevMonthShort}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Sparkline values={sparkValues} />
+              </div>
+              <div className="renda-line">
+                <span className="lbl">
+                  Renda principal
+                  {data.incomeHistory.length > 1 && (
+                    <span className="hist" onClick={() => setModal('incomeHistory')}>{data.incomeHistory.length} alterações no histórico</span>
+                  )}
+                </span>
+                <span className="val">
+                  <span className="mono" style={{ fontSize: 15, fontWeight: 500 }}>{formatBRL(mainIncome)}</span>
+                  <button className="linkbtn" onClick={() => setModal('income')}>{mainIncome > 0 ? 'Editar' : 'Definir'}</button>
+                </span>
+              </div>
+            </section>
+
+            {/* insights */}
+            {insights.length > 0 && (
+              <div className="chips reveal" style={{ animationDelay: '.16s' }}>
+                {insights.map((ins) => {
+                  const Ic = insightIcon[ins.tone] || Lightbulb
+                  const cls = ins.tone === 'bad' ? 'bad' : ins.tone === 'warn' ? 'warn' : 'good'
+                  return (
+                    <div className={`chip ${cls}`} key={ins.id}>
+                      <span className="ic"><Ic size={16} /></span>
+                      <span>{ins.text}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* fluxo */}
+            <section className="card reveal" style={{ animationDelay: '.2s' }}>
+              <div className="flow-split">
+                <div className="flow-item">
+                  <div className="eyebrow"><TrendingUp size={13} /> Entradas</div>
+                  <div className="v">{formatBRL(totalIncome)}</div>
+                  <div className="meta">Renda + {monthData.extras.length} {monthData.extras.length === 1 ? 'extra' : 'extras'}</div>
+                </div>
+                <div className="divider" />
+                <div className="flow-item">
+                  <div className="eyebrow"><TrendingDown size={13} /> Saídas</div>
+                  <div className="v">{formatBRL(totalExpenses)}</div>
+                  <div className="meta">{activeRecurring.length} fixas + {monthData.expenses.length} variáveis</div>
+                </div>
+              </div>
+              {totalIncome > 0 && (
+                <div className="bar-wrap">
+                  <div className="bar-head">
+                    <span style={{ color: 'var(--muted)' }}>Renda comprometida</span>
+                    <span className="pct">{Math.round(committedPct * 100)}%</span>
+                  </div>
+                  <div className="bar">
+                    <span className={committedPct >= 1 ? 'debt' : committedPct >= 0.9 ? 'warn' : ''} style={{ width: `${Math.min(committedPct, 1) * 100}%` }} />
+                  </div>
+                  <div className="bar-foot">
+                    {committedPct >= 1
+                      ? 'Você gastou mais do que ganhou este mês.'
+                      : <>Sobram <b>{formatBRL(totalIncome - totalExpenses)}</b> da sua renda.</>}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* gastos por categoria */}
+            {chartData.length > 0 && (
+              <section className="card reveal" style={{ animationDelay: '.24s' }}>
+                <div className="card-head"><div className="eyebrow"><BarChart3 size={13} /> Gastos por categoria</div></div>
+                <div className="donut-wrap">
+                  <DonutChart data={chartData} total={totalExpenses} />
+                  <div className="legend">
+                    {chartData.map((s) => (
+                      <div className="legend-row" key={s.id}>
+                        <span className="sw" style={{ background: s.color }} />
+                        <span className="nm">{s.emoji} {s.label}</span>
+                        <span className="pc">{Math.round((s.value / totalExpenses) * 100)}%</span>
+                        <span className="vl">{formatBRL(s.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* meta poupança */}
+            <section className="card reveal" style={{ animationDelay: '.28s' }}>
+              <div className="card-head">
+                <div className="eyebrow"><Target size={13} /> Meta de poupança</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="linkbtn" onClick={() => setModal('goal')}>{goalInfo ? 'Editar' : 'Definir'}</button>
+                  {goalInfo && (
+                    <button className="linkbtn danger" onClick={() => askConfirm('Excluir a meta de poupança?', 'Excluir').then((ok) => { if (ok) removeGoal() })}>Excluir</button>
+                  )}
+                </div>
+              </div>
+              {goalInfo ? (
+                <div className="meta-card">
+                  <ProgressRing progress={goalInfo.progress} />
+                  <div className="meta-info">
+                    <div className="amt">{formatBRL(goalInfo.saved)}</div>
+                    <div className="of">de {formatBRL(goalInfo.totalAmount)} · termina em {monthLabel(goalInfo.endMonth)}</div>
+                    <div className="note">
+                      {goalInfo.done
+                        ? `Meta batida! Você juntou ${formatBRL(goalInfo.saved)}. 🎉`
+                        : goalInfo.notStarted
+                        ? `Começa em ${monthLabel(goalInfo.startMonth)}.`
+                        : goalInfo.ended
+                        ? `Período encerrado. Juntou ${formatBRL(goalInfo.saved)}.`
+                        : `Faltam ${formatBRL(goalInfo.remainingAmount)}${goalInfo.monthsRemaining > 0 ? ` · ${formatBRL(goalInfo.requiredRate)}/mês` : ''}`}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-box">Sem meta definida. Diga quanto quer juntar e em quantos meses — o app acumula o que sobra de cada mês.</div>
+              )}
+            </section>
+          </div>
+
+          {/* ---------- RIGHT ---------- */}
+          <div className="col">
+            {/* despesas fixas */}
+            <section className="card reveal" style={{ animationDelay: '.14s' }}>
+              <div className="card-head">
+                <div className="eyebrow"><Repeat size={13} /> Despesas fixas</div>
+                <button className="btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setModal('recurring')}><Plus size={14} /> Adicionar</button>
+              </div>
+              <div className="ledger-head">
+                <div>
+                  <div className="ledger-total">{formatBRL(recurringTotal)}</div>
+                  <div className="ledger-sub">{activeRecurring.length} de {data.recurring.length} ativas neste mês</div>
+                </div>
+              </div>
+              {data.recurring.length > 0 ? (
+                <div className="rows">
+                  {data.recurring.map((r) => {
+                    const cat = findCategory(r.category)
+                    const col = cat?.color || '#8a8378'
+                    const card = r.cardId ? findCard(r.cardId) : null
+                    const off = disabledIds.includes(r.id)
+                    const installInfo = getInstallmentInfo(r, currentMonth)
+                    let dueTxt = null, dueCls = ''
+                    if (r.dueDay) {
+                      const live = isCurrentRealMonth && !off
+                      const diff = r.dueDay - todayDay
+                      if (live && diff < 0) { dueTxt = `venceu dia ${r.dueDay}`; dueCls = 'debt' }
+                      else if (live && diff === 0) { dueTxt = 'vence hoje'; dueCls = 'warn' }
+                      else if (live && diff <= 5) { dueTxt = `vence em ${diff} ${diff === 1 ? 'dia' : 'dias'}`; dueCls = 'warn' }
+                      else dueTxt = `vence dia ${r.dueDay}`
+                    }
+                    return (
+                      <div className={'row' + (off ? ' off' : '')} key={r.id}>
+                        <div className="main">
+                          <span className="ic-cell" style={{ background: `color-mix(in oklab, ${col} 16%, transparent)`, color: col }}>
+                            <span className="cat-dot" style={{ background: col }} />
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div className={'nm' + (off ? ' off-text' : '')}>{r.description}</div>
+                            <div className="tag">
+                              <span>{cat?.label || 'Outros'}</span>
+                              {installInfo && (<><span className="sep">·</span><span className={installInfo.remaining <= 0 ? 'good' : ''}>{installInfo.total}x · {installInfo.remaining > 0 ? `${installInfo.remaining} restantes` : 'Quitado'}</span></>)}
+                              {dueTxt && (<><span className="sep">·</span><span className={dueCls}>{dueTxt}</span></>)}
+                              {card && (<><span className="sep">·</span><span>{card.name}</span></>)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="amt neg">{formatBRL(r.amount)}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <button className={'toggle' + (off ? '' : ' on')} onClick={() => toggleRecurringForMonth(r.id)} title={off ? 'Pausada' : 'Ativa'} />
+                          <div className="row-actions">
+                            <button onClick={() => setEditingRecurring(r)} aria-label="Editar"><Pencil size={14} /></button>
+                            <button className="del" onClick={() => askConfirm(`Remover "${r.description}" das despesas fixas?`, 'Remover').then((ok) => { if (ok) removeRecurring(r.id) })} aria-label="Remover"><Trash2 size={14} /></button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="empty-box">Cadastre aluguel, internet, assinaturas. Cada uma conta automaticamente todo mês.</div>
+              )}
+            </section>
+
+            {/* movimentações */}
+            <section className="card reveal" style={{ animationDelay: '.18s' }}>
+              <div className="card-head">
+                <div>
+                  <div className="eyebrow">Movimentações do mês</div>
+                  <div className="ledger-sub" style={{ marginTop: 4 }}>Ganhos extras e despesas variáveis</div>
+                </div>
+              </div>
+              {allTransactions.length > 0 ? (
+                <div className="rows">
+                  {allTransactions.map((t) => {
+                    const pos = t.type === 'extra'
+                    const cat = findCategory(t.category)
+                    const col = pos ? 'var(--accent)' : (cat?.color || '#8a8378')
+                    const card = t.cardId ? findCard(t.cardId) : null
+                    return (
+                      <div className="row" key={`${t.type}-${t.id}`}>
+                        <div className="main">
+                          <span className="ic-cell" style={{ background: `color-mix(in oklab, ${col} 16%, transparent)`, color: col }}>
+                            {pos ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="nm">{t.description}</div>
+                            <div className="tag">
+                              <span>{new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                              <span className="sep">·</span>
+                              <span>{pos ? 'ganho extra' : (cat?.label || 'Outros')}</span>
+                              {card && (<><span className="sep">·</span><span>{card.name}</span></>)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className={'amt ' + (pos ? 'pos' : 'neg')}>{pos ? '+' : '−'} {formatBRL(t.amount)}</div>
+                        <div className="row-actions">
+                          <button onClick={() => setEditingTransaction(t)} aria-label="Editar"><Pencil size={14} /></button>
+                          <button className="del" onClick={() => pos ? removeExtra(t.id) : removeExpense(t.id)} aria-label="Remover"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="empty-box">Ainda nada por aqui. Use o botão + pra lançar um ganho extra ou uma despesa.</div>
+              )}
+            </section>
+          </div>
+        </div>
+      ) : (
+        /* ---------- AJUSTES ---------- */
+        <div className="set-grid reveal" style={{ animationDelay: '.1s' }}>
+          {/* reserva */}
+          <section className="card set-card">
+            <div className="card-head">
+              <div className="eyebrow"><Shield size={13} /> Reserva de emergência</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="linkbtn" onClick={() => setModal('reserve')}>{reserveInfo ? 'Editar' : 'Definir'}</button>
+                {reserveInfo && (
+                  <button className="linkbtn danger" onClick={() => askConfirm('Excluir a reserva de emergência?', 'Excluir').then((ok) => { if (ok) removeReserve() })}>Excluir</button>
+                )}
+              </div>
+            </div>
+            {reserveInfo ? (
+              <div className="meta-card">
+                <ProgressRing progress={reserveInfo.progress} />
+                <div className="meta-info">
+                  <div className="amt">{formatBRL(reserveInfo.currentAmount)}</div>
+                  <div className="of">de {formatBRL(reserveInfo.target)} · {reserveInfo.targetMonths} {reserveInfo.targetMonths === 1 ? 'mês' : 'meses'} de fixas</div>
+                  <div className="note">
+                    {reserveInfo.done
+                      ? `Reserva completa! Cobre ${reserveInfo.targetMonths} ${reserveInfo.targetMonths === 1 ? 'mês' : 'meses'}. 🛟`
+                      : reserveInfo.monthlyNeed > 0
+                      ? `Cobre ${reserveInfo.monthsCovered.toFixed(1)} meses hoje · faltam ${formatBRL(reserveInfo.remaining)}`
+                      : 'Cadastre suas despesas fixas pra calcular a meta.'}
+                  </div>
+                </div>
+              </div>
+            ) : (
               <>
-                <button onClick={() => { setModal('extra'); setFabOpen(false) }} className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-sm font-medium shadow-lg shadow-emerald-700/20 transition animate-fade-in-up">
-                  <TrendingUp size={16} /> Ganho extra
-                </button>
-                <button onClick={() => { setModal('expense'); setFabOpen(false) }} className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full bg-stone-900 dark:bg-white hover:bg-stone-700 dark:hover:bg-stone-200 text-white dark:text-stone-900 text-sm font-medium shadow-lg shadow-stone-900/20 dark:shadow-white/10 transition animate-fade-in-up">
-                  <TrendingDown size={16} /> Despesa
-                </button>
+                <p>Sem reserva definida. Guarde o equivalente a alguns meses de despesa fixa pra imprevistos — perda de renda, conserto inesperado. Diga quanto já tem e quantos meses quer cobrir.</p>
+                <div className="empty-box">Sugestão: com {formatBRL(recurringTotal)}/mês de fixas, uma reserva de 3 meses seria ~{formatBRL(recurringTotal * 3)}.</div>
               </>
             )}
-            <button onClick={() => setFabOpen((o) => !o)} className="w-14 h-14 rounded-full bg-stone-900 dark:bg-white text-white dark:text-stone-900 shadow-xl shadow-stone-900/30 dark:shadow-white/10 flex items-center justify-center hover:bg-stone-700 dark:hover:bg-stone-200 transition" aria-label="Adicionar">
-              <Plus size={24} className={`transition-transform duration-200 ${fabOpen ? 'rotate-45' : ''}`} />
-            </button>
-          </div>
-        </>
+          </section>
+
+          {/* cartões */}
+          <section className="card set-card">
+            <div className="card-head">
+              <div className="eyebrow"><CreditCard size={13} /> Cartões</div>
+              <button className="btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setModal('cards')}><Plus size={14} /> Gerenciar</button>
+            </div>
+            <p>Marque o cartão ao lançar despesas pra ver pra onde a grana tá indo.</p>
+            {userCards.length > 0 ? (
+              <div className="cards-list">
+                {userCards.map((c) => (
+                  <span className="card-pill" key={c.id}><BankLogo id={c.id} size={22} />{c.name}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-box">Cadastre os bancos/cartões que você usa (Nubank, Santander, C6, etc).</div>
+            )}
+          </section>
+
+          {/* orçamentos */}
+          <section className="card set-card">
+            <div className="card-head">
+              <div className="eyebrow"><Wallet size={13} /> Orçamentos</div>
+              {unbudgetedCategories.length > 0 && (
+                <button className="btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setModal('budget')}><Plus size={14} /> Adicionar</button>
+              )}
+            </div>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--ink)', fontWeight: 500, margin: '2px 0 4px' }}>
+              {budgetList.length} {budgetList.length === 1 ? 'categoria' : 'categorias'}
+            </p>
+            {budgetList.length > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                {budgetList.map((b) => {
+                  const over = b.spent > b.limit
+                  const near = !over && b.pct >= 0.8
+                  return (
+                    <div className="budget-item" key={b.catId}>
+                      <div className="top">
+                        <span className="nm">{b.emoji} {b.label}</span>
+                        <span className="vals">
+                          <span style={over ? { color: 'var(--debt)' } : undefined}>{formatBRL(b.spent)}</span>
+                          <span className="lim">/ {formatBRL(b.limit)}</span>
+                          <button className="linkbtn" onClick={() => setEditingBudget({ category: b.catId, amount: b.limit })}><Pencil size={12} /></button>
+                          <button className="linkbtn danger" onClick={() => askConfirm(`Remover o orçamento de ${b.label}?`, 'Remover').then((ok) => { if (ok) removeBudget(b.catId) })}><Trash2 size={12} /></button>
+                        </span>
+                      </div>
+                      <div className="bar"><span className={over ? 'debt' : near ? 'warn' : ''} style={{ width: `${Math.min(b.pct, 1) * 100}%` }} /></div>
+                      <div className="foot" style={over ? { color: 'var(--debt)' } : near ? { color: 'var(--warn)' } : undefined}>
+                        {over ? `Passou ${formatBRL(b.spent - b.limit)} do teto.` : `Sobram ${formatBRL(b.limit - b.spent)} este mês.`}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <>
+                <p>Defina um teto mensal e acompanhe quanto já gastou.</p>
+                <div className="empty-box">Ex.: teto de Alimentação R$ 800 → o app mostra uma barra de quanto você já comprometeu no mês.</div>
+              </>
+            )}
+          </section>
+
+          {/* backup */}
+          <section className="card set-card">
+            <div className="card-head"><div className="eyebrow"><Download size={13} /> Backup completo</div></div>
+            <p>Salva tudo num arquivo JSON. Útil pra mover de PC ou guardar uma cópia segura.</p>
+            <div className="backup-btns">
+              <button className="btn-ghost" onClick={exportBackup}><Download size={15} /> Salvar backup</button>
+              <button className="btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Restaurar backup</button>
+              <input type="file" accept=".json" ref={fileInputRef} onChange={importBackup} style={{ display: 'none' }} />
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* FAB */}
+      {!isEmpty && (
+        <div className="fab-zone">
+          {fabOpen && (
+            <div className="fab-menu">
+              <button className="fab-action in" onClick={() => { setModal('extra'); setFabOpen(false) }}>
+                <TrendingUp size={17} /> Ganho extra
+              </button>
+              <button className="fab-action out" style={{ animationDelay: '.05s' }} onClick={() => { setModal('expense'); setFabOpen(false) }}>
+                <TrendingDown size={17} /> Despesa
+              </button>
+            </div>
+          )}
+          <button className={'fab' + (fabOpen ? ' open' : '')} onClick={() => setFabOpen((o) => !o)} title="Adicionar" aria-label="Adicionar">
+            <Plus size={26} strokeWidth={2.2} />
+          </button>
+        </div>
       )}
 
       {/* Modals */}

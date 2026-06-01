@@ -10,26 +10,30 @@ function Toast({ toast, onDismiss }) {
   }, [toast.id, onDismiss])
 
   const isError = toast.type === 'error'
+  const c = isError ? 'var(--debt)' : 'var(--accent-ink)'
+  const bg = isError ? 'var(--debt-bg)' : 'var(--accent-bg)'
   return (
     <div
-      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border shadow-lg text-sm ${
-        isError
-          ? 'bg-rose-50 dark:bg-rose-950/70 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-200'
-          : 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-200'
-      }`}
+      className="animate-fade-in-up"
+      style={{
+        pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 15px', borderRadius: 12, fontSize: 13.5, color: c, background: bg,
+        border: `1px solid color-mix(in oklab, ${c} 25%, transparent)`, boxShadow: 'var(--shadow)',
+      }}
     >
-      {isError ? <AlertCircle size={16} className="flex-shrink-0" /> : <CheckCircle2 size={16} className="flex-shrink-0" />}
-      <p className="flex-1">{toast.message}</p>
-      <button onClick={() => onDismiss(toast.id)} className="opacity-60 hover:opacity-100 transition" aria-label="Fechar">
-        <X size={14} />
-      </button>
+      {isError ? <AlertCircle size={16} style={{ flexShrink: 0 }} /> : <CheckCircle2 size={16} style={{ flexShrink: 0 }} />}
+      <p style={{ flex: 1 }}>{toast.message}</p>
+      <button onClick={() => onDismiss(toast.id)} style={{ opacity: 0.6 }} aria-label="Fechar"><X size={14} /></button>
     </div>
   )
 }
 
 export default function ToastContainer({ toasts, onDismiss }) {
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
+    <div style={{
+      position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 80,
+      display: 'flex', flexDirection: 'column', gap: 8, width: 'calc(100% - 2rem)', maxWidth: 380, pointerEvents: 'none',
+    }}>
       {toasts.map((t) => (
         <Toast key={t.id} toast={t} onDismiss={onDismiss} />
       ))}

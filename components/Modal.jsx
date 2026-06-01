@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { X } from 'lucide-react'
 import { CATEGORIES, CUSTOM_EMOJIS } from '@/lib/constants'
 import { formatBRL, shiftMonth, monthLabel } from '@/lib/helpers'
 import BankLogo from './BankLogo'
@@ -40,7 +39,7 @@ export default function Modal({
 
   const titles = {
     income: initialValues ? 'Editar renda' : 'Renda principal',
-    extra: initialValues ? 'Editar ganho extra' : 'Ganho extra',
+    extra: initialValues ? 'Editar ganho extra' : 'Novo ganho extra',
     expense: initialValues ? 'Editar despesa' : 'Nova despesa',
     goal: initialValues ? 'Editar meta' : 'Meta de poupança',
     recurring: initialValues ? 'Editar despesa fixa' : 'Despesa fixa',
@@ -48,18 +47,18 @@ export default function Modal({
     reserve: initialValues ? 'Editar reserva' : 'Reserva de emergência',
   }
   const subtitles = {
-    income: 'Vale para esse mês e os seguintes, até a próxima alteração',
-    extra: 'Alguém te pagou? Bico? Coloca aqui.',
-    expense: 'Tudo o que saiu da conta',
-    goal: 'Quanto você quer juntar e em quanto tempo',
-    recurring: 'Conta automaticamente todo mês',
-    budget: 'Defina um teto de gasto mensal para a categoria',
-    reserve: 'Quanto você já guardou e quantos meses quer cobrir',
+    income: 'Vale para esse mês e os seguintes, até a próxima alteração.',
+    extra: 'Uma entrada além da sua renda principal.',
+    expense: 'Um gasto variável deste mês.',
+    goal: 'Quanto você quer juntar e em quanto tempo.',
+    recurring: 'Conta automaticamente todo mês.',
+    budget: 'Defina um teto de gasto mensal para a categoria.',
+    reserve: 'Quanto você já guardou e quantos meses quer cobrir.',
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault()
     const num = parseFloat(String(amount).replace(',', '.'))
-    // Reserva pode começar em 0 (ainda juntando); demais exigem valor positivo.
     if (isNaN(num) || (type === 'reserve' ? num < 0 : num <= 0)) return
     if (type === 'income') {
       onSubmit({ amount: num, startMonth: incomeStartMonth })
@@ -102,324 +101,201 @@ export default function Modal({
   const showCategory = type === 'expense' || type === 'recurring' || type === 'budget'
   const showCard = type === 'expense' || type === 'recurring'
   const amountLabel =
-    type === 'goal' ? 'Valor total'
-    : type === 'budget' ? 'Teto mensal'
-    : type === 'reserve' ? 'Valor já guardado'
-    : 'Valor'
+    type === 'goal' ? 'Valor total (R$)'
+    : type === 'budget' ? 'Teto mensal (R$)'
+    : type === 'reserve' ? 'Valor já guardado (R$)'
+    : 'Valor (R$)'
 
   return (
-    <div
-      className="fixed inset-0 bg-stone-900/40 dark:bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overlay-in"
-      onClick={onClose}
-    >
-      <div
-        className="bg-stone-50 dark:bg-stone-950 rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border border-transparent dark:border-stone-800 sheet-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h3 className="text-2xl font-medium tracking-tight text-stone-900 dark:text-stone-100">
-              {titles[type]}
-            </h3>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">{subtitles[type]}</p>
+    <div className="overlay" onClick={onClose}>
+      <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <h3>{titles[type]}</h3>
+        <div className="sub">{subtitles[type]}</div>
+
+        {showDescription && (
+          <div className="field">
+            <label>Descrição</label>
+            <input
+              autoFocus
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={type === 'extra' ? 'Ex.: Freela de design' : type === 'recurring' ? 'Ex.: Aluguel, Netflix, Internet' : 'Ex.: Mercado'}
+            />
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 flex items-center justify-center flex-shrink-0"
-            aria-label="Fechar"
-          >
-            <X size={16} />
-          </button>
+        )}
+
+        <div className="field">
+          <label>{amountLabel}</label>
+          <input
+            className="mono"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0,00"
+            autoFocus={!showDescription}
+          />
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">{amountLabel}</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 dark:text-stone-400 text-sm">R$</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0,00"
-                autoFocus
-                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-lg text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-              />
-            </div>
+        {type === 'income' && (
+          <div className="field">
+            <label>A partir de</label>
+            <input type="month" value={incomeStartMonth} onChange={(e) => setIncomeStartMonth(e.target.value)} />
           </div>
+        )}
 
-          {type === 'income' && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">A partir de</label>
-              <input
-                type="month"
-                value={incomeStartMonth}
-                onChange={(e) => setIncomeStartMonth(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-              />
-              <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
-                Esse valor vale a partir desse mês e segue nos próximos, até você registrar outra alteração.
-              </p>
+        {type === 'goal' && (
+          <>
+            <div className="field">
+              <label>A partir de</label>
+              <input type="month" value={goalStartMonth} onChange={(e) => setGoalStartMonth(e.target.value)} />
             </div>
-          )}
-
-          {type === 'goal' && (
-            <>
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">A partir de</label>
-                <input
-                  type="month"
-                  value={goalStartMonth}
-                  onChange={(e) => setGoalStartMonth(e.target.value)}
-                  className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Em quantos meses</label>
-                <div className="grid grid-cols-6 gap-2">
-                  {[3, 6, 12, 18, 24, 36].map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setGoalMonths(p)}
-                      className={`py-2 rounded-xl text-xs transition ${
-                        goalMonths === p
-                          ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
-                          : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-                {(() => {
-                  const num = parseFloat(String(amount).replace(',', '.'))
-                  const endLabel = monthLabel(shiftMonth(goalStartMonth, goalMonths - 1))
-                  const pace = !isNaN(num) && num > 0 ? formatBRL(num / goalMonths) : null
-                  return (
-                    <p className="text-xs text-stone-500 dark:text-stone-400 mt-2 capitalize">
-                      Termina em {endLabel}
-                      <span className="lowercase">{pace ? ` · ${pace}/mês pra fechar` : ''}</span>
-                    </p>
-                  )
-                })()}
-              </div>
-            </>
-          )}
-
-          {type === 'reserve' && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Meses de despesa fixa pra cobrir</label>
-              <div className="grid grid-cols-6 gap-2">
-                {[3, 6, 9, 12, 18, 24].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setReserveMonths(p)}
-                    className={`py-2 rounded-xl text-xs transition ${
-                      reserveMonths === p
-                        ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
-                        : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                    }`}
-                  >
-                    {p}
-                  </button>
+            <div className="field">
+              <label>Em quantos meses</label>
+              <div className="chip-select">
+                {[3, 6, 12, 18, 24, 36].map((p) => (
+                  <button type="button" key={p} className={goalMonths === p ? 'sel' : ''} onClick={() => setGoalMonths(p)}>{p}</button>
                 ))}
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
-                A meta da reserva é {reserveMonths} {reserveMonths === 1 ? 'mês' : 'meses'} das suas despesas fixas. O ideal costuma ser de 3 a 6 meses.
-              </p>
-            </div>
-          )}
-
-          {showDescription && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Descrição</label>
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={type === 'extra' ? 'Ex: Pagamento do João' : type === 'recurring' ? 'Ex: Aluguel, Netflix, Internet' : 'Ex: Mercado'}
-                className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-              />
-            </div>
-          )}
-
-          {showDate && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Data</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-              />
-            </div>
-          )}
-
-          {showCategory && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Categoria</label>
-              <div className="grid grid-cols-2 gap-2">
-                {CATEGORIES.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => { setCategory(c.id); if (c.id !== 'outros') setCustomEmoji('') }}
-                    className={`px-3 py-2.5 rounded-xl text-sm flex items-center gap-2 transition ${
-                      category === c.id
-                        ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
-                        : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                    }`}
-                  >
-                    <span>{c.emoji}</span><span>{c.label}</span>
-                  </button>
-                ))}
-              </div>
-              {category === 'outros' && (
-                <div className="mt-3">
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 mb-2">Ícone</p>
-                  <div className="grid grid-cols-8 gap-1">
-                    {CUSTOM_EMOJIS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => setCustomEmoji(emoji === customEmoji ? '' : emoji)}
-                        className={`text-xl p-1.5 rounded-xl transition ${customEmoji === emoji ? 'bg-stone-900 dark:bg-white' : 'hover:bg-stone-100 dark:hover:bg-stone-800'}`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {showCard && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">
-                Cartão {userCards.length === 0 && '(cadastre na seção Cartões)'}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => { setCardId(null); setParceladoId(null) }}
-                  className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition ${
-                    cardId === null && parceladoId === null
-                      ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
-                      : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                  }`}
-                >
-                  À vista / Pix
-                </button>
-                {type === 'recurring' && (
-                  <button
-                    onClick={() => { setParceladoId('parcelado'); setCardId(null) }}
-                    className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition ${
-                      parceladoId === 'parcelado'
-                        ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
-                        : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                    }`}
-                  >
-                    Parcelado
-                  </button>
-                )}
-                {userCards.map((card) => (
-                  <button
-                    key={card.id}
-                    onClick={() => { setCardId(card.id); setParceladoId(null) }}
-                    className={`pl-1.5 pr-3 py-1 rounded-xl text-xs flex items-center gap-2 transition border ${
-                      cardId === card.id ? 'text-white border-transparent' : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                    }`}
-                    style={cardId === card.id ? { backgroundColor: card.color, borderColor: card.color } : {}}
-                  >
-                    <BankLogo id={card.id} size={20} />{card.name}
-                  </button>
-                ))}
-              </div>
-              {parceladoId === 'parcelado' && (() => {
-                const [sy, sm] = startMonth.split('-').map(Number)
-                const [vy, vm] = currentViewedMonth.split('-').map(Number)
-                const elapsed = (vy - sy) * 12 + (vm - sm)
-                const current = elapsed + 1
-                const isValid = elapsed >= 0 && current <= numParcelas
-                const isAlreadyDone = elapsed >= numParcelas
+              {(() => {
+                const num = parseFloat(String(amount).replace(',', '.'))
+                const endLabel = monthLabel(shiftMonth(goalStartMonth, goalMonths - 1))
+                const pace = !isNaN(num) && num > 0 ? formatBRL(num / goalMonths) : null
                 return (
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Número de parcelas</label>
-                      <div className="grid grid-cols-6 gap-2">
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (
-                          <button
-                            key={p}
-                            onClick={() => setNumParcelas(p)}
-                            className={`py-2 rounded-xl text-xs transition ${
-                              numParcelas === p
-                                ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
-                                : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
-                            }`}
-                          >
-                            {p}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Mês da primeira parcela</label>
-                      <input
-                        type="month"
-                        value={startMonth}
-                        max={currentViewedMonth}
-                        onChange={(e) => setStartMonth(e.target.value)}
-                        className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-                      />
-                      <p className={`text-xs mt-2 ${isAlreadyDone ? 'text-emerald-600 dark:text-emerald-400' : !isValid ? 'text-rose-500 dark:text-rose-400' : 'text-stone-500 dark:text-stone-400'}`}>
-                        {isAlreadyDone
-                          ? `Parcela ${numParcelas}/${numParcelas} — quitada`
-                          : !isValid
-                          ? 'O mês de início não pode ser depois do mês atual'
-                          : `Parcela ${current} de ${numParcelas} neste mês · ${numParcelas - current} restantes`}
-                      </p>
-                    </div>
-                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, textTransform: 'capitalize' }}>
+                    Termina em {endLabel}<span style={{ textTransform: 'lowercase' }}>{pace ? ` · ${pace}/mês pra fechar` : ''}</span>
+                  </p>
                 )
               })()}
             </div>
-          )}
+          </>
+        )}
 
-          {type === 'recurring' && parceladoId !== 'parcelado' && (
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Dia de vencimento (opcional)</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="1"
-                max="31"
-                value={dueDay}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === '') return setDueDay('')
-                  const n = Math.max(1, Math.min(31, parseInt(v, 10) || 1))
-                  setDueDay(String(n))
-                }}
-                placeholder="Ex: 10"
-                className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
-              />
-              <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
-                Dia do mês em que essa conta vence. O app avisa quando estiver chegando.
-              </p>
+        {type === 'reserve' && (
+          <div className="field">
+            <label>Meses de despesa fixa pra cobrir</label>
+            <div className="chip-select">
+              {[3, 6, 9, 12, 18, 24].map((p) => (
+                <button type="button" key={p} className={reserveMonths === p ? 'sel' : ''} onClick={() => setReserveMonths(p)}>{p}</button>
+              ))}
             </div>
-          )}
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+              A meta é {reserveMonths} {reserveMonths === 1 ? 'mês' : 'meses'} das suas despesas fixas. O ideal costuma ser de 3 a 6 meses.
+            </p>
+          </div>
+        )}
 
-          <button
-            onClick={handleSubmit}
-            className="w-full bg-stone-900 dark:bg-white text-white dark:text-stone-900 py-3.5 rounded-full font-medium hover:bg-stone-700 dark:hover:bg-stone-200 transition mt-2"
-          >
-            Salvar
-          </button>
+        {showDate && (
+          <div className="field">
+            <label>Data</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+        )}
+
+        {showCategory && (
+          <div className="field">
+            <label>Categoria</label>
+            <div className="chip-select">
+              {CATEGORIES.map((c) => (
+                <button
+                  type="button"
+                  key={c.id}
+                  className={category === c.id ? 'sel' : ''}
+                  onClick={() => { setCategory(c.id); if (c.id !== 'outros') setCustomEmoji('') }}
+                >
+                  <span>{c.emoji}</span><span>{c.label}</span>
+                </button>
+              ))}
+            </div>
+            {category === 'outros' && (
+              <div style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)', display: 'block', marginBottom: 7 }}>Ícone</label>
+                <div className="chip-select">
+                  {CUSTOM_EMOJIS.map((emoji) => (
+                    <button type="button" key={emoji} className={customEmoji === emoji ? 'sel' : ''} onClick={() => setCustomEmoji(emoji === customEmoji ? '' : emoji)} style={{ fontSize: 18, padding: '6px 10px' }}>
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showCard && (
+          <div className="field">
+            <label>Cartão {userCards.length === 0 && '(cadastre na seção Cartões)'}</label>
+            <div className="chip-select">
+              <button type="button" className={cardId === null && parceladoId === null ? 'sel' : ''} onClick={() => { setCardId(null); setParceladoId(null) }}>
+                À vista / Pix
+              </button>
+              {type === 'recurring' && (
+                <button type="button" className={parceladoId === 'parcelado' ? 'sel' : ''} onClick={() => { setParceladoId('parcelado'); setCardId(null) }}>
+                  Parcelado
+                </button>
+              )}
+              {userCards.map((card) => (
+                <button type="button" key={card.id} className={cardId === card.id ? 'sel' : ''} onClick={() => { setCardId(card.id); setParceladoId(null) }}>
+                  <BankLogo id={card.id} size={18} />{card.name}
+                </button>
+              ))}
+            </div>
+
+            {parceladoId === 'parcelado' && (() => {
+              const [sy, sm] = startMonth.split('-').map(Number)
+              const [vy, vm] = currentViewedMonth.split('-').map(Number)
+              const elapsed = (vy - sy) * 12 + (vm - sm)
+              const current = elapsed + 1
+              const isValid = elapsed >= 0 && current <= numParcelas
+              const isAlreadyDone = elapsed >= numParcelas
+              return (
+                <div style={{ marginTop: 14 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)', display: 'block', marginBottom: 7 }}>Número de parcelas</label>
+                  <div className="chip-select">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (
+                      <button type="button" key={p} className={numParcelas === p ? 'sel' : ''} onClick={() => setNumParcelas(p)}>{p}x</button>
+                    ))}
+                  </div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)', display: 'block', margin: '14px 0 7px' }}>Mês da primeira parcela</label>
+                  <input type="month" value={startMonth} max={currentViewedMonth} onChange={(e) => setStartMonth(e.target.value)} />
+                  <p style={{ fontSize: 12, marginTop: 8, color: isAlreadyDone ? 'var(--accent-ink)' : !isValid ? 'var(--debt)' : 'var(--muted)' }}>
+                    {isAlreadyDone
+                      ? `Parcela ${numParcelas}/${numParcelas} — quitada`
+                      : !isValid
+                      ? 'O mês de início não pode ser depois do mês atual'
+                      : `Parcela ${current} de ${numParcelas} neste mês · ${numParcelas - current} restantes`}
+                  </p>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {type === 'recurring' && parceladoId !== 'parcelado' && (
+          <div className="field">
+            <label>Dia de vencimento (opcional)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max="31"
+              value={dueDay}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === '') return setDueDay('')
+                const n = Math.max(1, Math.min(31, parseInt(v, 10) || 1))
+                setDueDay(String(n))
+              }}
+              placeholder="Ex.: 10"
+            />
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 7 }}>Dia do mês em que essa conta vence. O app avisa quando estiver chegando.</p>
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" className="btn-cancel" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="btn-solid">Salvar</button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }

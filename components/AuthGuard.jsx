@@ -28,8 +28,8 @@ export default function AuthGuard({ children }) {
 
   if (!checked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950">
-        <p className="text-stone-400 dark:text-stone-500 text-sm">Carregando…</p>
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+        <p style={{ color: 'var(--muted)', fontSize: 14 }}>Carregando…</p>
       </div>
     )
   }
