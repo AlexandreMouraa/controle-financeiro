@@ -17,12 +17,15 @@ export default function Modal({
 }) {
   const [amount, setAmount] = useState(() => {
     if (type === 'goal') return initialValues ? String(initialValues.totalAmount) : ''
+    if (type === 'reserve') return initialValues ? String(initialValues.currentAmount) : ''
     if (initialValues) return String(initialValues.amount)
     if (type === 'income' && currentIncome) return String(currentIncome)
     return ''
   })
   const [description, setDescription] = useState(() => initialValues?.description || '')
   const [category, setCategory] = useState(() => initialValues?.category || 'alimentacao')
+  const [dueDay, setDueDay] = useState(() => initialValues?.dueDay ? String(initialValues.dueDay) : '')
+  const [reserveMonths, setReserveMonths] = useState(() => initialValues?.targetMonths || 6)
   const [date, setDate] = useState(() => initialValues?.date || new Date().toISOString().split('T')[0])
   const [cardId, setCardId] = useState(() => initialValues?.cardId || null)
   const [parceladoId, setParceladoId] = useState(() => initialValues?.parcelado ? 'parcelado' : null)
@@ -41,6 +44,8 @@ export default function Modal({
     expense: initialValues ? 'Editar despesa' : 'Nova despesa',
     goal: initialValues ? 'Editar meta' : 'Meta de poupança',
     recurring: initialValues ? 'Editar despesa fixa' : 'Despesa fixa',
+    budget: initialValues ? 'Editar orçamento' : 'Orçamento da categoria',
+    reserve: initialValues ? 'Editar reserva' : 'Reserva de emergência',
   }
   const subtitles = {
     income: 'Vale para esse mês e os seguintes, até a próxima alteração',
@@ -48,15 +53,22 @@ export default function Modal({
     expense: 'Tudo o que saiu da conta',
     goal: 'Quanto você quer juntar e em quanto tempo',
     recurring: 'Conta automaticamente todo mês',
+    budget: 'Defina um teto de gasto mensal para a categoria',
+    reserve: 'Quanto você já guardou e quantos meses quer cobrir',
   }
 
   const handleSubmit = () => {
     const num = parseFloat(String(amount).replace(',', '.'))
-    if (isNaN(num) || num <= 0) return
+    // Reserva pode começar em 0 (ainda juntando); demais exigem valor positivo.
+    if (isNaN(num) || (type === 'reserve' ? num < 0 : num <= 0)) return
     if (type === 'income') {
       onSubmit({ amount: num, startMonth: incomeStartMonth })
     } else if (type === 'goal') {
       onSubmit({ totalAmount: num, startMonth: goalStartMonth, months: goalMonths })
+    } else if (type === 'budget') {
+      onSubmit({ amount: num, category })
+    } else if (type === 'reserve') {
+      onSubmit({ currentAmount: num, targetMonths: reserveMonths })
     } else if (type === 'extra') {
       if (!description.trim()) return
       onSubmit({ amount: num, description: description.trim(), date })
@@ -79,15 +91,21 @@ export default function Modal({
         rPayload.startMonth = startMonth
       } else {
         rPayload.cardId = cardId
+        if (dueDay) rPayload.dueDay = parseInt(dueDay, 10)
       }
       onSubmit(rPayload)
     }
   }
 
-  const showDescription = type !== 'income' && type !== 'goal'
+  const showDescription = type === 'extra' || type === 'expense' || type === 'recurring'
   const showDate = type === 'extra' || type === 'expense'
-  const showCategory = type === 'expense' || type === 'recurring'
+  const showCategory = type === 'expense' || type === 'recurring' || type === 'budget'
   const showCard = type === 'expense' || type === 'recurring'
+  const amountLabel =
+    type === 'goal' ? 'Valor total'
+    : type === 'budget' ? 'Teto mensal'
+    : type === 'reserve' ? 'Valor já guardado'
+    : 'Valor'
 
   return (
     <div
@@ -116,7 +134,7 @@ export default function Modal({
 
         <div className="space-y-4">
           <div>
-            <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">{type === 'goal' ? 'Valor total' : 'Valor'}</label>
+            <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">{amountLabel}</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 dark:text-stone-400 text-sm">R$</span>
               <input
@@ -189,6 +207,31 @@ export default function Modal({
                 })()}
               </div>
             </>
+          )}
+
+          {type === 'reserve' && (
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Meses de despesa fixa pra cobrir</label>
+              <div className="grid grid-cols-6 gap-2">
+                {[3, 6, 9, 12, 18, 24].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setReserveMonths(p)}
+                    className={`py-2 rounded-xl text-xs transition ${
+                      reserveMonths === p
+                        ? 'bg-stone-900 dark:bg-white text-white dark:text-stone-900'
+                        : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 text-stone-900 dark:text-stone-100'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
+                A meta da reserva é {reserveMonths} {reserveMonths === 1 ? 'mês' : 'meses'} das suas despesas fixas. O ideal costuma ser de 3 a 6 meses.
+              </p>
+            </div>
           )}
 
           {showDescription && (
@@ -342,6 +385,30 @@ export default function Modal({
                   </div>
                 )
               })()}
+            </div>
+          )}
+
+          {type === 'recurring' && parceladoId !== 'parcelado' && (
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 block mb-2">Dia de vencimento (opcional)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="31"
+                value={dueDay}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === '') return setDueDay('')
+                  const n = Math.max(1, Math.min(31, parseInt(v, 10) || 1))
+                  setDueDay(String(n))
+                }}
+                placeholder="Ex: 10"
+                className="w-full px-4 py-3 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-300 transition"
+              />
+              <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
+                Dia do mês em que essa conta vence. O app avisa quando estiver chegando.
+              </p>
             </div>
           )}
 

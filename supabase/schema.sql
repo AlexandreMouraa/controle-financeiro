@@ -51,6 +51,7 @@ create table if not exists public.recurring (
   parcelado             boolean not null default false,
   num_parcelas          integer,
   start_month           text,
+  due_day               integer,                            -- dia de vencimento (1-31), opcional
   created_at            timestamptz not null default now()  -- usado em order('created_at')
 );
 create index if not exists recurring_user_idx on public.recurring (user_id);
@@ -84,6 +85,27 @@ create table if not exists public.user_cards (
   primary key (user_id, card_id)
 );
 
+-- ── budgets ───────────────────────────────────────────────────────
+-- Teto mensal de gasto por categoria. Uma linha por (usuário, categoria).
+-- O comparativo com o gasto real do mês é feito no cliente.
+create table if not exists public.budgets (
+  user_id    uuid    not null references auth.users (id) on delete cascade,
+  category   text    not null,
+  amount     numeric not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, category)            -- upsert onConflict: user_id,category
+);
+
+-- ── emergency_reserve ─────────────────────────────────────────────
+-- Reserva de emergência: valor atual guardado + meta em nº de meses
+-- de despesa fixa. Uma linha por usuário (upsert onConflict: user_id).
+create table if not exists public.emergency_reserve (
+  user_id        uuid    not null primary key references auth.users (id) on delete cascade,
+  current_amount numeric not null default 0,
+  target_months  integer not null default 6,
+  created_at     timestamptz not null default now()
+);
+
 -- ── Row Level Security ────────────────────────────────────────────
 -- O app acessa o banco do navegador com a anon key, então RLS é
 -- obrigatório para impedir leitura/escrita de dados de outros usuários.
@@ -92,7 +114,7 @@ declare t text;
 begin
   foreach t in array array[
     'income_history','expenses','extras','recurring',
-    'disabled_recurring','goals','user_cards'
+    'disabled_recurring','goals','user_cards','budgets','emergency_reserve'
   ] loop
     execute format('alter table public.%I enable row level security;', t);
     execute format('drop policy if exists %1$s_owner on public.%1$I;', t);

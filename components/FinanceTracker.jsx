@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight,
   Trash2, Target, Repeat, Download, BarChart3, CreditCard,
-  Upload, Sun, Moon, Pencil, LogOut,
+  Upload, Sun, Moon, Pencil, LogOut, Lightbulb, Shield, Wallet, CalendarClock,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -13,6 +13,7 @@ import { CATEGORIES, THEME_KEY } from '@/lib/constants'
 import {
   formatBRL, monthKey, monthLabel, emptyMonth, shiftMonth, computeMonthSummary,
   findCategory, findCard, migrateData, getInstallmentInfo, computeGoalProgress,
+  computeInsights, computeReserveProgress, spendByCategory,
 } from '@/lib/helpers'
 
 import BankLogo from './BankLogo'
@@ -32,10 +33,12 @@ export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
   const [data, setData] = useState({
     monthlyData: {}, recurring: [], goal: null, disabledRecurring: {}, cards: [], incomeHistory: [],
+    budgets: {}, reserve: null,
   })
   const [loaded, setLoaded] = useState(false)
   const [modal, setModal] = useState(null)
   const [editingRecurring, setEditingRecurring] = useState(null)
+  const [editingBudget, setEditingBudget] = useState(null)
   const [editingIncome, setEditingIncome] = useState(null)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [theme, setTheme] = useState('light')
@@ -106,6 +109,8 @@ export default function FinanceTracker() {
   } = computeMonthSummary(data, currentMonth)
   const isRed = balance < 0
   const goalInfo = computeGoalProgress(data, currentMonth)
+  const reserveInfo = computeReserveProgress(data, currentMonth)
+  const insights = computeInsights(data, currentMonth)
   const userCards = data.cards.map((id) => findCard(id)).filter(Boolean)
 
   const prevBalance = computeMonthSummary(data, shiftMonth(currentMonth, -1)).balance
@@ -127,8 +132,15 @@ export default function FinanceTracker() {
     data.recurring.length > 0 ||
     data.cards.length > 0 ||
     data.goal != null ||
+    data.reserve != null ||
+    Object.keys(data.budgets).length > 0 ||
     Object.values(data.monthlyData).some((m) => m.expenses.length > 0 || m.extras.length > 0)
   const isEmpty = loaded && hasAnyData === false
+
+  // Para destacar vencimentos só no mês real corrente.
+  const realMonth = monthKey(new Date())
+  const todayDay = new Date().getDate()
+  const isCurrentRealMonth = currentMonth === realMonth
 
   const expensesByCategory = {}
   ;[...monthData.expenses, ...activeRecurring].forEach((e) => {
@@ -136,6 +148,15 @@ export default function FinanceTracker() {
   })
   const chartData = CATEGORIES.map((c) => ({ ...c, value: expensesByCategory[c.id] || 0 }))
     .filter((c) => c.value > 0).sort((a, b) => b.value - a.value)
+
+  const budgetList = Object.entries(data.budgets)
+    .map(([catId, limit]) => {
+      const cat = findCategory(catId)
+      const spent = expensesByCategory[catId] || 0
+      return { catId, label: cat?.label || 'Outros', emoji: cat?.emoji || '📦', color: cat?.color || '#78716c', limit, spent, pct: limit > 0 ? spent / limit : 0 }
+    })
+    .sort((a, b) => b.pct - a.pct)
+  const unbudgetedCategories = CATEGORIES.filter((c) => !(c.id in data.budgets))
 
   const updateMonth = (updater) =>
     setData((prev) => ({
@@ -262,6 +283,54 @@ export default function FinanceTracker() {
       console.error('Erro ao remover meta:', error)
       setData((prev) => ({ ...prev, goal: prevGoal }))
       addToast('Erro ao remover meta.')
+    }
+  }
+
+  const setBudget = async ({ category, amount }) => {
+    const prev = data.budgets
+    setData((d) => ({ ...d, budgets: { ...d.budgets, [category]: amount } }))
+    const { error } = await db.upsertBudget(userIdRef.current, { category, amount })
+    if (error) {
+      console.error('Erro ao salvar orçamento:', error)
+      setData((d) => ({ ...d, budgets: prev }))
+      addToast('Erro ao salvar orçamento.')
+    }
+  }
+
+  const removeBudget = async (category) => {
+    const prev = data.budgets
+    setData((d) => {
+      const next = { ...d.budgets }
+      delete next[category]
+      return { ...d, budgets: next }
+    })
+    const { error } = await db.deleteBudget(userIdRef.current, category)
+    if (error) {
+      console.error('Erro ao remover orçamento:', error)
+      setData((d) => ({ ...d, budgets: prev }))
+      addToast('Erro ao remover orçamento.')
+    }
+  }
+
+  const setReserve = async (reserve) => {
+    const prev = data.reserve
+    setData((d) => ({ ...d, reserve }))
+    const { error } = await db.upsertReserve(userIdRef.current, reserve)
+    if (error) {
+      console.error('Erro ao salvar reserva:', error)
+      setData((d) => ({ ...d, reserve: prev }))
+      addToast('Erro ao salvar reserva.')
+    }
+  }
+
+  const removeReserve = async () => {
+    const prev = data.reserve
+    setData((d) => ({ ...d, reserve: null }))
+    const { error } = await db.deleteReserve(userIdRef.current)
+    if (error) {
+      console.error('Erro ao remover reserva:', error)
+      setData((d) => ({ ...d, reserve: prev }))
+      addToast('Erro ao remover reserva.')
     }
   }
 
@@ -443,6 +512,26 @@ export default function FinanceTracker() {
         ) : (
         <>
 
+        {/* Insights */}
+        {insights.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {insights.map((ins) => {
+              const tone = {
+                good: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300',
+                warn: 'bg-amber-50 dark:bg-amber-950/30 border-amber-100 dark:border-amber-900/40 text-amber-800 dark:text-amber-300',
+                bad: 'bg-rose-50 dark:bg-rose-950/30 border-rose-100 dark:border-rose-900/40 text-rose-800 dark:text-rose-300',
+                info: 'bg-stone-50 dark:bg-stone-900 border-stone-200 dark:border-stone-800 text-stone-700 dark:text-stone-300',
+              }[ins.tone] || ''
+              return (
+                <div key={ins.id} className={`flex items-start gap-2.5 rounded-2xl border px-4 py-3 animate-fade-in-up ${tone}`}>
+                  <Lightbulb size={15} className="flex-shrink-0 mt-0.5" />
+                  <p className="text-sm leading-snug">{ins.text}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Renda principal */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 border border-stone-200 dark:border-stone-800 mb-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -569,6 +658,57 @@ export default function FinanceTracker() {
           )}
         </div>
 
+        {/* Reserva de emergência */}
+        <div className="bg-white dark:bg-stone-900 rounded-2xl p-5 border border-stone-200 dark:border-stone-800 mb-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Shield size={14} className="text-stone-500 dark:text-stone-400" />
+              <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Reserva de emergência</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setModal('reserve')} className="text-xs text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white underline-offset-4 hover:underline">
+                {reserveInfo ? 'Editar' : 'Definir'}
+              </button>
+              {reserveInfo && (
+                <button
+                  onClick={() => askConfirm('Excluir a reserva de emergência?', 'Excluir').then((ok) => { if (ok) removeReserve() })}
+                  className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-500 underline-offset-4 hover:underline"
+                >
+                  Excluir
+                </button>
+              )}
+            </div>
+          </div>
+          {reserveInfo ? (
+            <div className="flex items-center gap-4">
+              <div className="relative flex-shrink-0">
+                <ProgressRing progress={reserveInfo.progress} done={reserveInfo.done} />
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-mono font-semibold">
+                  {Math.round(reserveInfo.progress * 100)}%
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-2xl font-mono">
+                  {formatBRL(reserveInfo.currentAmount)}{' '}
+                  <span className="text-sm font-sans text-stone-500 dark:text-stone-400">de {formatBRL(reserveInfo.target)}</span>
+                </p>
+                <p className="text-[11px] text-stone-400 dark:text-stone-500 mt-0.5">
+                  Meta: {reserveInfo.targetMonths} {reserveInfo.targetMonths === 1 ? 'mês' : 'meses'} de despesa fixa ({formatBRL(reserveInfo.monthlyNeed)}/mês)
+                </p>
+                <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
+                  {reserveInfo.done
+                    ? `Reserva completa! Cobre ${reserveInfo.targetMonths} ${reserveInfo.targetMonths === 1 ? 'mês' : 'meses'}. 🛟`
+                    : reserveInfo.monthlyNeed > 0
+                    ? `Cobre ${reserveInfo.monthsCovered.toFixed(1)} ${reserveInfo.monthsCovered === 1 ? 'mês' : 'meses'} hoje · faltam ${formatBRL(reserveInfo.remaining)}`
+                    : 'Cadastre suas despesas fixas pra calcular a meta da reserva.'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-stone-500 dark:text-stone-400">Sem reserva definida. Guarde o equivalente a alguns meses de despesa fixa pra emergências (perda de renda, imprevisto). Diga quanto já tem e quantos meses quer cobrir.</p>
+          )}
+        </div>
+
         {/* Cartões */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 mb-3 overflow-hidden">
           <div className="p-5 flex items-start justify-between">
@@ -625,6 +765,16 @@ export default function FinanceTracker() {
                         <p className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1.5 flex-wrap">
                           <span>{cat?.label || 'Outros'}</span>
                           {installInfo && (<><span>·</span><span className={installInfo.remaining <= 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}>{installInfo.total}x · {installInfo.remaining > 0 ? `${installInfo.remaining} restantes` : 'Quitado'}</span></>)}
+                          {r.dueDay && (() => {
+                            const live = isCurrentRealMonth && !isDisabled
+                            const diff = r.dueDay - todayDay
+                            const overdue = live && diff < 0
+                            const dueToday = live && diff === 0
+                            const soon = live && diff > 0 && diff <= 5
+                            const cls = overdue ? 'text-rose-600 dark:text-rose-400 font-medium' : (dueToday || soon) ? 'text-amber-600 dark:text-amber-400 font-medium' : ''
+                            const txt = overdue ? `venceu dia ${r.dueDay}` : dueToday ? 'vence hoje' : soon ? `vence em ${diff} ${diff === 1 ? 'dia' : 'dias'}` : `vence dia ${r.dueDay}`
+                            return (<><span>·</span><span className={`flex items-center gap-1 ${cls}`}><CalendarClock size={11} />{txt}</span></>)
+                          })()}
                           {card && (<><span>·</span><BankLogo id={card.id} size={14} /><span>{card.name}</span></>)}
                         </p>
                       </div>
@@ -727,6 +877,59 @@ export default function FinanceTracker() {
           </div>
         )}
 
+        {/* Orçamentos por categoria */}
+        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 mb-3 overflow-hidden">
+          <div className="p-5 flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1"><Wallet size={14} className="text-stone-500 dark:text-stone-400" /><p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400">Orçamentos</p></div>
+              <p className="text-xl font-mono">{budgetList.length} {budgetList.length === 1 ? 'categoria' : 'categorias'}</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">Defina um teto mensal e acompanhe quanto já gastou</p>
+            </div>
+            {unbudgetedCategories.length > 0 && (
+              <button onClick={() => setModal('budget')} className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 text-xs rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition flex items-center gap-1">
+                <Plus size={12} /> Adicionar
+              </button>
+            )}
+          </div>
+          {budgetList.length > 0 ? (
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800 border-t border-stone-100 dark:border-stone-800">
+              {budgetList.map((b) => {
+                const over = b.spent > b.limit
+                const near = !over && b.pct >= 0.8
+                const barCls = over ? 'bg-rose-600' : near ? 'bg-amber-500' : 'bg-emerald-600'
+                return (
+                  <li key={b.catId} className="p-4 animate-fade-in-up">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base">{b.emoji}</span>
+                        <span className="text-sm font-medium truncate">{b.label}</span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className={`text-sm font-mono ${over ? 'text-rose-600 dark:text-rose-400' : 'text-stone-900 dark:text-stone-100'}`}>
+                          {formatBRL(b.spent)}
+                        </span>
+                        <span className="text-xs text-stone-400 dark:text-stone-500">/ {formatBRL(b.limit)}</span>
+                        <button onClick={() => setEditingBudget({ category: b.catId, amount: b.limit })} className="text-stone-300 dark:text-stone-600 hover:text-stone-700 dark:hover:text-stone-300 p-1.5 transition" aria-label="Editar"><Pencil size={13} /></button>
+                        <button onClick={() => askConfirm(`Remover o orçamento de ${b.label}?`, 'Remover').then((ok) => { if (ok) removeBudget(b.catId) })} className="text-stone-300 dark:text-stone-600 hover:text-rose-600 dark:hover:text-rose-500 p-1.5 transition" aria-label="Remover"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                    <div className="h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${barCls}`} style={{ width: `${Math.min(b.pct, 1) * 100}%` }} />
+                    </div>
+                    <p className={`text-xs mt-1.5 ${over ? 'text-rose-600 dark:text-rose-400' : near ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'}`}>
+                      {over
+                        ? `Passou ${formatBRL(b.spent - b.limit)} do teto.`
+                        : `Sobram ${formatBRL(b.limit - b.spent)} este mês.`}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="px-5 pb-5 text-xs text-stone-500 dark:text-stone-400">Defina tetos por categoria (ex: Alimentação R$800) e o app mostra uma barra de quanto você já comprometeu no mês.</p>
+          )}
+        </div>
+
         {/* Backup */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 p-5 mb-3">
           <p className="text-[10px] uppercase tracking-[0.15em] text-stone-500 dark:text-stone-400 mb-1">Backup completo</p>
@@ -765,17 +968,25 @@ export default function FinanceTracker() {
       ) : modal === 'incomeHistory' ? (
         <IncomeHistoryModal onClose={() => setModal(null)} incomeHistory={data.incomeHistory} onRemove={(sm) => askConfirm(`Remover renda de ${monthLabel(sm)}?`, 'Remover').then((ok) => { if (ok) removeIncomeEntry(sm) })} onEdit={(entry) => { setEditingIncome(entry); setModal(null) }} />
       ) : modal ? (
-        <Modal type={modal} initialValues={modal === 'goal' ? data.goal : null} onClose={() => setModal(null)} currentIncome={mainIncome} userCards={userCards} currentViewedMonth={currentMonth}
+        <Modal type={modal} initialValues={modal === 'goal' ? data.goal : modal === 'reserve' ? data.reserve : null} onClose={() => setModal(null)} currentIncome={mainIncome} userCards={userCards} currentViewedMonth={currentMonth}
           onSubmit={(payload) => {
             if (modal === 'income') setIncomeEntry(payload)
             else if (modal === 'extra') addExtra(payload)
             else if (modal === 'expense') addExpense(payload)
             else if (modal === 'goal') setGoal(payload)
             else if (modal === 'recurring') addRecurring(payload)
+            else if (modal === 'budget') setBudget(payload)
+            else if (modal === 'reserve') setReserve(payload)
             setModal(null)
           }}
         />
       ) : null}
+
+      {editingBudget && (
+        <Modal type="budget" initialValues={editingBudget} onClose={() => setEditingBudget(null)} currentIncome={mainIncome} userCards={userCards} currentViewedMonth={currentMonth}
+          onSubmit={(payload) => { setBudget(payload); setEditingBudget(null) }}
+        />
+      )}
 
       {editingIncome && (
         <Modal type="income" initialValues={editingIncome} onClose={() => setEditingIncome(null)} currentIncome={editingIncome.amount} userCards={userCards} currentViewedMonth={currentMonth}
