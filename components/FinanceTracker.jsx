@@ -430,9 +430,7 @@ export default function FinanceTracker() {
     ...monthData.expenses.map((e) => ({ ...e, type: 'expense' })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
-  const extrasTotal = monthData.extras.reduce((s, e) => s + e.amount, 0)
-  const variableExpensesTotal = monthData.expenses.reduce((s, e) => s + e.amount, 0)
-  const movimentacoesNet = extrasTotal - variableExpensesTotal
+  const movimentacoesNet = totalExtras - variableExpensesTotal
 
   const exportBackup = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -736,7 +734,7 @@ export default function FinanceTracker() {
                     <div className="ledger-total" style={{ color: movimentacoesNet >= 0 ? 'var(--accent-ink)' : 'var(--debt)' }}>
                       {movimentacoesNet >= 0 ? '+ ' : '− '}{formatBRL(Math.abs(movimentacoesNet))}
                     </div>
-                    <div className="ledger-sub">{formatBRL(extrasTotal)} em ganhos − {formatBRL(variableExpensesTotal)} em despesas</div>
+                    <div className="ledger-sub">{formatBRL(totalExtras)} em ganhos − {formatBRL(variableExpensesTotal)} em despesas</div>
                   </div>
                 </div>
               )}
