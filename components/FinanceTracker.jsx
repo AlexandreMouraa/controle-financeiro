@@ -430,6 +430,8 @@ export default function FinanceTracker() {
     ...monthData.expenses.map((e) => ({ ...e, type: 'expense' })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
+  const extrasTotal = monthData.extras.reduce((s, e) => s + e.amount, 0)
+
   const exportBackup = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -726,6 +728,14 @@ export default function FinanceTracker() {
                   <div className="ledger-sub" style={{ marginTop: 4 }}>Ganhos extras e despesas variáveis</div>
                 </div>
               </div>
+              {monthData.extras.length > 0 && (
+                <div className="ledger-head">
+                  <div>
+                    <div className="ledger-total" style={{ color: 'var(--accent-ink)' }}>+ {formatBRL(extrasTotal)}</div>
+                    <div className="ledger-sub">{monthData.extras.length} {monthData.extras.length === 1 ? 'ganho extra' : 'ganhos extras'} neste mês</div>
+                  </div>
+                </div>
+              )}
               {allTransactions.length > 0 ? (
                 <div className="rows">
                   {allTransactions.map((t) => {
