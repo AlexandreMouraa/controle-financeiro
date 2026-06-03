@@ -9,7 +9,7 @@ export default function DonutChart({ data, total, size = 148 }) {
 
   return (
     <div className="donut" style={{ width: size, height: size }}>
-      <svg width={size} height={size}>
+      <svg width={size} height={size} focusable="false" aria-hidden="true">
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line-soft)" strokeWidth="11" />
         {data.map((d) => {
           const frac = total > 0 ? d.value / total : 0

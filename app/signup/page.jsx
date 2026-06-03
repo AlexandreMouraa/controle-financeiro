@@ -18,6 +18,7 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [checking, setChecking] = useState(true)
 
   useEffect(() => {
     try {
@@ -34,7 +35,8 @@ export default function SignupPage() {
   useEffect(() => {
     if (!loaded) return
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/')
+      if (session) { router.replace('/'); return }
+      setChecking(false)
     })
   }, [loaded, router])
 
@@ -93,17 +95,20 @@ export default function SignupPage() {
     }
   }
 
+  if (!loaded || checking) return <div className="auth-page" aria-busy="true" />
+
   return (
     <div className="auth-page">
       <div className="auth-card">
 
         <div className="auth-head">
-          <p className="eyebrow">Cadastro</p>
+          <span className="brand"><span className="logo"><span className="dot" />Fin<em style={{ fontStyle: 'normal', color: 'var(--accent-ink)' }}>Track</em></span></span>
           <button className="icon-btn" onClick={toggleTheme} aria-label="Alternar tema" style={{ width: 34, height: 34, borderRadius: 9 }}>
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>
         </div>
 
+        <p className="eyebrow" style={{ marginTop: 4 }}>Cadastro</p>
         <h1 className="auth-title">Crie sua <em>conta</em></h1>
         <p className="auth-lede">Comece a controlar suas finanças agora.</p>
 

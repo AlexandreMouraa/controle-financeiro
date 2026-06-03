@@ -6,7 +6,7 @@ export default function ProgressRing({ progress, size = 60, stroke = 5 }) {
   const offset = c * (1 - clamped)
   return (
     <div className="ring" style={{ width: size, height: size }}>
-      <svg width={size} height={size}>
+      <svg width={size} height={size} focusable="false" aria-hidden="true">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line-soft)" strokeWidth={stroke} />
         <circle
           cx={size / 2}

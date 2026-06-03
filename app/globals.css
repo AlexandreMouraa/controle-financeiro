@@ -70,6 +70,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.45;
+  overflow-x: clip;
 }
 
 /* faint paper texture */
@@ -93,8 +94,11 @@ button { font-family: inherit; }
 * { -webkit-tap-highlight-color: transparent; }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-/* decorative SVGs must not be selectable/focusable on touch (iOS draws a blue box otherwise) */
-.ring, .donut, .spark { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* decorative SVGs must not be selectable/focusable (browsers draw a blue selection box otherwise) */
+.ring, .donut, .spark,
+.ring *, .donut *, .spark * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* the progress ring is purely decorative — no pointer/selection target at all */
+.ring, .ring svg { pointer-events: none; }
 .eyebrow {
   font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--muted); white-space: nowrap;
@@ -373,8 +377,33 @@ button { font-family: inherit; }
 .btn-cancel:hover { background: var(--paper-2); color: var(--ink); }
 
 /* ---------------- auth pages ---------------- */
-.auth-page { position: relative; z-index: 1; min-height: 100vh; display: grid; place-items: center; padding: 40px 20px; }
-.auth-card { width: 100%; max-width: 440px; }
+.auth-page {
+  position: relative; z-index: 1; min-height: 100vh;
+  display: grid; place-items: center; padding: 40px 20px;
+  background:
+    radial-gradient(120% 75% at 50% -10%, color-mix(in oklab, var(--accent) 30%, var(--bg)) 0%, transparent 60%),
+    radial-gradient(95% 65% at 100% 102%, color-mix(in oklab, var(--accent-ink) 24%, var(--bg)) 0%, transparent 55%),
+    radial-gradient(85% 60% at 0% 100%, color-mix(in oklab, var(--accent) 14%, var(--bg)) 0%, transparent 55%),
+    linear-gradient(165deg, color-mix(in oklab, var(--accent) 9%, var(--bg)) 0%, var(--bg) 55%);
+  background-size: 160% 160%, 150% 150%, 150% 150%, 100% 100%;
+  background-position: 50% 0%, 100% 100%, 0% 100%, 0 0;
+  animation: authDrift 26s ease-in-out infinite alternate;
+}
+@keyframes authDrift {
+  from { background-position: 46% -4%, 104% 104%, -4% 104%, 0 0; }
+  to   { background-position: 54% 6%, 92% 88%, 8% 92%, 0 0; }
+}
+/* green gradient replaces the global paper texture on auth screens */
+body:has(.auth-page)::before { opacity: 0; }
+.auth-card { width: 100%; max-width: 440px; animation: authIn .55s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes authIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.auth-card .card {
+  border-color: color-mix(in oklab, var(--accent) 20%, var(--line));
+  box-shadow:
+    0 1px 0 color-mix(in oklab, var(--accent) 14%, transparent),
+    0 22px 55px -24px color-mix(in oklab, var(--accent) 48%, transparent);
+}
+@media (prefers-reduced-motion: reduce) { .auth-card, .auth-page { animation: none; } }
 .auth-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .auth-title { font-family: var(--font-serif); font-weight: 400; font-size: clamp(30px, 5vw, 40px); line-height: 1.05; letter-spacing: -.015em; color: var(--ink); margin-top: 6px; }
 .auth-title em { font-style: italic; color: var(--accent-ink); }
@@ -405,8 +434,10 @@ button { font-family: inherit; }
   .month-nav { width: 100%; justify-content: space-between; }
   .month-nav .label { flex: 1; min-width: 0; }
 
-  .tabs { margin: 18px 0 4px; }
-  .tab { margin-right: 20px; }
+  /* fixed 2-col grid so tabs never wrap/clip across zoom levels */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 18px 0 4px; border-bottom: 1px solid var(--line-soft); }
+  .tab { margin-right: 0; text-align: center; padding: 11px 0; }
+  .tab.active::after { bottom: -1px; }
 
   .card { padding: 18px 16px; }
   .card-head { gap: 8px; }

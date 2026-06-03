@@ -46,6 +46,7 @@ export default function Modal({
   const [startMonth, setStartMonth] = useState(() => initialValues?.startMonth || currentViewedMonth)
   const [goalMonths, setGoalMonths] = useState(() => initialValues?.months || 6)
   const [goalStartMonth, setGoalStartMonth] = useState(() => initialValues?.startMonth || currentViewedMonth)
+  const [goalInitial, setGoalInitial] = useState(() => initialValues?.initialAmount ? numToMask(initialValues.initialAmount) : '')
   const [incomeStartMonth, setIncomeStartMonth] = useState(() =>
     type === 'income' && initialValues?.startMonth ? initialValues.startMonth : currentViewedMonth
   )
@@ -80,7 +81,8 @@ export default function Modal({
     if (type === 'income') {
       onSubmit({ amount: num, startMonth: incomeStartMonth })
     } else if (type === 'goal') {
-      onSubmit({ totalAmount: num, startMonth: goalStartMonth, months: goalMonths })
+      const initial = parseMaskBRL(goalInitial)
+      onSubmit({ totalAmount: num, startMonth: goalStartMonth, months: goalMonths, initialAmount: isNaN(initial) || initial < 0 ? 0 : initial })
     } else if (type === 'budget') {
       onSubmit({ amount: num, category })
     } else if (type === 'reserve') {
@@ -171,6 +173,19 @@ export default function Modal({
             <div className="field">
               <label>A partir de</label>
               <input type="month" value={goalStartMonth} onChange={(e) => setGoalStartMonth(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Valor já guardado (R$) <span style={{ fontWeight: 400, color: 'var(--faint)' }}>· opcional</span></label>
+              <input
+                className="mono"
+                inputMode="numeric"
+                value={goalInitial}
+                onChange={(e) => setGoalInitial(maskBRLInput(e.target.value))}
+                placeholder="0,00"
+              />
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+                Quanto você já tem guardado pra essa meta hoje. Entra como ponto de partida.
+              </p>
             </div>
             <div className="field">
               <label>Em quantos meses</label>

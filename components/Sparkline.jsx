@@ -17,7 +17,7 @@ export default function Sparkline({ values, width = 132, height = 56 }) {
   const gid = `sg${Math.round(width + height)}`
 
   return (
-    <svg className="spark" width={width} height={height} style={{ color: 'var(--accent)' }}>
+    <svg className="spark" width={width} height={height} focusable="false" aria-hidden="true" style={{ color: 'var(--accent)' }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="currentColor" stopOpacity="0.18" />

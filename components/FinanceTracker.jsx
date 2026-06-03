@@ -478,7 +478,7 @@ export default function FinanceTracker() {
       {/* top bar */}
       <header className="topbar reveal">
         <div className="brand">
-          <span className="logo"><span className="dot" />Controle</span>
+          <span className="logo"><span className="dot" />Fin<em style={{ fontStyle: 'normal', color: 'var(--accent-ink)' }}>Track</em></span>
           {!isEmpty && <span className={`status-pill ${health.cls}`}>{health.label}</span>}
         </div>
         <div className="topbar-right">
