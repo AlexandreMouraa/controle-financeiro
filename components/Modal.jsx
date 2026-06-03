@@ -274,10 +274,21 @@ export default function Modal({
                 <div style={{ marginTop: 14 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)', display: 'block', marginBottom: 7 }}>Número de parcelas</label>
                   <div className="chip-select">
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (
+                    {[2, 3, 6, 10, 12, 24, 36, 48, 60].map((p) => (
                       <button type="button" key={p} className={numParcelas === p ? 'sel' : ''} onClick={() => setNumParcelas(p)}>{p}x</button>
                     ))}
                   </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={numParcelas}
+                    onChange={(e) => {
+                      const n = Math.max(1, Math.min(60, parseInt(e.target.value, 10) || 1))
+                      setNumParcelas(n)
+                    }}
+                    style={{ marginTop: 8 }}
+                  />
                   <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)', display: 'block', margin: '14px 0 7px' }}>Mês da primeira parcela</label>
                   <input type="month" value={startMonth} max={currentViewedMonth} onChange={(e) => setStartMonth(e.target.value)} />
                   <p style={{ fontSize: 12, marginTop: 8, color: isAlreadyDone ? 'var(--accent-ink)' : !isValid ? 'var(--debt)' : 'var(--muted)' }}>
