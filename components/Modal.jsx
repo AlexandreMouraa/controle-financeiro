@@ -109,8 +109,8 @@ export default function Modal({
         rPayload.startMonth = startMonth
       } else {
         rPayload.cardId = cardId
-        if (dueDay) rPayload.dueDay = parseInt(dueDay, 10)
       }
+      if (dueDay) rPayload.dueDay = parseInt(dueDay, 10)
       onSubmit(rPayload)
     }
   }
@@ -319,7 +319,7 @@ export default function Modal({
           </div>
         )}
 
-        {type === 'recurring' && parceladoId !== 'parcelado' && (
+        {type === 'recurring' && (
           <div className="field">
             <label>Dia de vencimento (opcional)</label>
             <input
