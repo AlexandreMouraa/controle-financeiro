@@ -92,6 +92,8 @@ button { font-family: inherit; }
 /* kill the mobile blue tap-highlight box and the default blue focus outline,
    keeping an accessible focus ring for keyboard navigation */
 * { -webkit-tap-highlight-color: transparent; }
+/* mata o anel de foco azul padrão do Tailwind (box-shadow), que aparecia como quadrado azul */
+*, ::before, ::after { --tw-ring-shadow: 0 0 #0000; --tw-ring-color: transparent; }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 /* decorative SVGs must not be selectable/focusable (browsers draw a blue selection box otherwise) */
