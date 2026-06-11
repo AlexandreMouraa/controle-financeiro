@@ -31,10 +31,19 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loaded) return
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { router.replace('/'); return }
-      setChecking(false)
-    })
+    let active = true
+    // getUser valida a sessão no servidor (getSession só lê o localStorage e
+    // deixa passar sessão expirada/revogada, causando loop de redirect)
+    supabase.auth.getUser()
+      .then(({ data: { user } }) => {
+        if (!active) return
+        if (user) { router.replace('/'); return }
+        // sessão podre no storage: limpa pra não redirecionar de novo
+        supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+        setChecking(false)
+      })
+      .catch(() => { if (active) setChecking(false) })
+    return () => { active = false }
   }, [loaded, router])
 
   useEffect(() => {

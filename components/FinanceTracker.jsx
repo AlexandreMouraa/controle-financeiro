@@ -80,14 +80,23 @@ export default function FinanceTracker() {
     }
 
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) { setLoaded(true); return }
+      if (!user) {
+        // sessão podre: renderizar o dashboard sem userId deixava tudo vazio
+        // e toda gravação falhava — limpa a sessão e volta pro login
+        supabase.auth.signOut({ scope: 'local' }).finally(() => {
+          window.location.replace('/login')
+        })
+        return
+      }
       userIdRef.current = user.id
       db.loadAllData(user.id).then(({ data: fetchedData, error }) => {
-        if (error) console.error('Erro ao carregar dados:', error)
-        else if (fetchedData) setData(fetchedData)
+        if (error) {
+          console.error('Erro ao carregar dados:', error)
+          addToast('Erro ao carregar seus dados. Recarregue a página.')
+        } else if (fetchedData) setData(fetchedData)
         setLoaded(true)
       })
-    })
+    }).catch(() => window.location.replace('/login'))
   }, [])
 
   useEffect(() => {
