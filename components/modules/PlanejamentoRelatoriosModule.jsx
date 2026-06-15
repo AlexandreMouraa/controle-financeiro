@@ -6,6 +6,7 @@ import { CATEGORIES } from '@/lib/constants'
 import AreaChart from '../AreaChart'
 import BarChart from '../BarChart'
 import KpiCard from '../KpiCard'
+import CategoryIcon from '../CategoryIcon'
 
 const DOWS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -143,7 +144,7 @@ export function RelatoriosModule({ ctx }) {
                 return (
                   <div className="cmp-row" key={c.id}>
                     <span className="cat-dot" style={{ background: c.color }} />
-                    <span className="nm">{c.emoji} {c.label}</span>
+                    <span className="nm"><CategoryIcon id={c.id} size={15} color={c.color} /> {c.label}</span>
                     {pct === null ? (
                       <span className="delta down">novo</span>
                     ) : pct === 0 ? (

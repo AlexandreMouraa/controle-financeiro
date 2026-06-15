@@ -3,14 +3,15 @@
 import { Pencil, Trash2, Settings, CreditCard, Download, Upload, Plus } from 'lucide-react'
 import { formatBRL } from '@/lib/helpers'
 import { CATEGORIES } from '@/lib/constants'
-import BankLogo from '../BankLogo'
+import CreditCardArt from '../CreditCardArt'
+import CategoryIcon from '../CategoryIcon'
 
 export function CategoriasModule({ ctx }) {
   const { data, expensesByCategory, setEditingBudget, removeBudget, askConfirm } = ctx
 
   return (
     <div className="page">
-      <p className="page-intro">Organize seus gastos por categoria e defina um teto mensal para cada uma. As cores aparecem nos gráficos e nas transações.</p>
+      <p className="page-intro">Defina um teto mensal de gasto para cada categoria e acompanhe quanto já usou. As cores e ícones aparecem nos gráficos e nas transações.</p>
       <div className="cards-2">
         {CATEGORIES.map((c, i) => {
           const gasto = expensesByCategory[c.id] || 0
@@ -20,7 +21,7 @@ export function CategoriasModule({ ctx }) {
           return (
             <div className="card reveal" key={c.id} style={{ padding: 18, animationDelay: i * 0.03 + 's' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-                <span style={{ width: 40, height: 40, borderRadius: 11, background: `color-mix(in oklab, ${c.color} 18%, transparent)`, display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 18 }}>{c.emoji}</span>
+                <span style={{ width: 40, height: 40, borderRadius: 11, background: `color-mix(in oklab, ${c.color} 18%, transparent)`, display: 'grid', placeItems: 'center', flexShrink: 0 }}><CategoryIcon id={c.id} size={20} color={c.color} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700 }}>{c.label}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
@@ -64,8 +65,8 @@ export function ConfiguracoesModule({ ctx }) {
           <div className="card-head"><div className="eyebrow"><CreditCard size={13} /> Cartões</div><button className="btn-ghost sm" onClick={() => openModal('cards')}><Plus size={14} /> Gerenciar</button></div>
           <p>Marque o cartão ao lançar despesas para acompanhar pra onde a grana vai.</p>
           {userCards.length > 0 ? (
-            <div className="cards-list">
-              {userCards.map((c) => (<span className="card-pill" key={c.id}><BankLogo id={c.id} size={22} />{c.name}</span>))}
+            <div className="cc-grid">
+              {userCards.map((c) => (<CreditCardArt key={c.id} id={c.id} name={c.name} />))}
             </div>
           ) : (
             <div className="empty-box">Cadastre os bancos/cartões que você usa (Nubank, Santander, C6, etc).</div>

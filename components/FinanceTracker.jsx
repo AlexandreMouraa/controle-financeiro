@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Menu,
   Sun, Moon, LogOut, LayoutDashboard, ArrowLeftRight, CreditCard,
-  Target, CalendarDays, BarChart3, Tag, Settings, Repeat,
+  Target, CalendarDays, BarChart3, Wallet, Settings, Repeat, KeyRound, ChevronUp,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -39,7 +39,7 @@ const NAV = [
   { id: 'metas', label: 'Metas', Icon: Target, title: 'Metas financeiras', crumb: 'Objetivos e poupança' },
   { id: 'planejamento', label: 'Planejamento', Icon: CalendarDays, title: 'Planejamento', crumb: 'Calendário e fluxo futuro' },
   { id: 'relatorios', label: 'Relatórios', Icon: BarChart3, title: 'Relatórios', crumb: 'Análises financeiras' },
-  { id: 'categorias', label: 'Categorias', Icon: Tag, title: 'Categorias', crumb: 'Organização e orçamentos' },
+  { id: 'categorias', label: 'Orçamentos', Icon: Wallet, title: 'Orçamentos', crumb: 'Tetos de gasto por categoria' },
   { id: 'configuracoes', label: 'Configurações', Icon: Settings, title: 'Configurações', crumb: 'Preferências e dados' },
 ]
 
@@ -61,6 +61,8 @@ export default function FinanceTracker() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [pwdForm, setPwdForm] = useState(null) // { p1, p2, saving } quando trocando senha
   const [userEmail, setUserEmail] = useState('')
   const fileInputRef = useRef(null)
   const userIdRef = useRef(null)
@@ -130,6 +132,32 @@ export default function FinanceTracker() {
       console.error('Erro ao sair:', error)
       setLoggingOut(false)
     }
+  }
+
+  // Troca a senha do usuário logado. Retorna true em caso de sucesso.
+  const changePassword = async (password) => {
+    if (!password || password.length < 6) {
+      addToast('A senha precisa ter ao menos 6 caracteres.')
+      return false
+    }
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      console.error('Erro ao trocar senha:', error)
+      addToast('Não foi possível trocar a senha. Tente novamente.')
+      return false
+    }
+    addToast('Senha alterada com sucesso.', 'success')
+    return true
+  }
+
+  // Submete o form de troca de senha do popover de perfil.
+  const submitPassword = async () => {
+    if (!pwdForm || pwdForm.saving) return
+    if (pwdForm.p1 !== pwdForm.p2) { addToast('As senhas não conferem.'); return }
+    setPwdForm((f) => ({ ...f, saving: true }))
+    const ok = await changePassword(pwdForm.p1)
+    if (ok) { setPwdForm(null); setProfileOpen(false) }
+    else setPwdForm((f) => (f ? { ...f, saving: false } : f))
   }
 
   const monthData = data.monthlyData[currentMonth] || emptyMonth()
@@ -511,6 +539,7 @@ export default function FinanceTracker() {
     expensesByCategory, recurringTotal, allTransactions,
     activeRecurring, disabledIds,
     isCurrentRealMonth, todayDay, theme,
+    userEmail, handleLogout, loggingOut, changePassword, addToast,
     go: setPage, openModal: setModal, toggleTheme, askConfirm,
     removeTransaction, removeGoal, removeReserve, removeBudget, setEditingBudget,
     setEditingRecurring, toggleRecurringForMonth, removeRecurring,
@@ -564,17 +593,42 @@ export default function FinanceTracker() {
           ))}
         </nav>
         <div className="sb-foot">
-          <div className="sb-user">
+          {profileOpen && <div className="menu-scrim" onClick={() => { setProfileOpen(false); setPwdForm(null) }} />}
+          <button className={'sb-user' + (profileOpen ? ' open' : '')} onClick={() => setProfileOpen((o) => !o)} title="Conta">
             <span className="av">{initials}</span>
             <div className="meta">
               <div className="n">{userName}</div>
               <div className="e">{userEmail}</div>
             </div>
-          </div>
-          <button className="nav-item" onClick={handleLogout} disabled={loggingOut} title="Sair">
-            <span className="ic"><LogOut size={19} /></span>
-            <span className="lbl">Sair</span>
+            <ChevronUp className="chev" size={16} />
           </button>
+
+          {profileOpen && (
+            <div className="profile-menu">
+              <div className="pm-head">
+                <span className="av">{initials}</span>
+                <div className="meta"><div className="n">{userName}</div><div className="e">{userEmail}</div></div>
+              </div>
+              {pwdForm ? (
+                <div className="pwd-form">
+                  <input className="input" type="password" placeholder="Nova senha (mín. 6)" value={pwdForm.p1} autoFocus
+                    onChange={(e) => setPwdForm((f) => ({ ...f, p1: e.target.value }))} autoComplete="new-password" />
+                  <input className="input" type="password" placeholder="Confirmar senha" value={pwdForm.p2}
+                    onChange={(e) => setPwdForm((f) => ({ ...f, p2: e.target.value }))} autoComplete="new-password"
+                    onKeyDown={(e) => { if (e.key === 'Enter') submitPassword() }} />
+                  <div className="backup-btns">
+                    <button className="btn-ghost sm" onClick={submitPassword} disabled={pwdForm.saving || !pwdForm.p1 || !pwdForm.p2}>{pwdForm.saving ? 'Salvando…' : 'Salvar'}</button>
+                    <button className="btn-ghost sm" onClick={() => setPwdForm(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setPwdForm({ p1: '', p2: '', saving: false })}><KeyRound size={16} /> Trocar senha</button>
+                  <button className="danger" onClick={handleLogout} disabled={loggingOut}><LogOut size={16} /> {loggingOut ? 'Saindo…' : 'Sair'}</button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </aside>
 

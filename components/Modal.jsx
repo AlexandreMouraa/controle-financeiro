@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { CATEGORIES, CUSTOM_EMOJIS } from '@/lib/constants'
 import { formatBRL, shiftMonth, monthLabel } from '@/lib/helpers'
 import BankLogo from './BankLogo'
+import CategoryIcon from './CategoryIcon'
 
 // Máscara de moeda: digita só números e os centavos vão preenchendo da direita.
 const onlyDigits = (s) => String(s).replace(/\D/g, '')
@@ -240,7 +241,7 @@ export default function Modal({
                   className={category === c.id ? 'sel' : ''}
                   onClick={() => { setCategory(c.id); if (c.id !== 'outros') setCustomEmoji('') }}
                 >
-                  <span>{c.emoji}</span><span>{c.label}</span>
+                  <CategoryIcon id={c.id} size={15} color={category === c.id ? undefined : c.color} /><span>{c.label}</span>
                 </button>
               ))}
             </div>

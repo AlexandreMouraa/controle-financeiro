@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Lightbulb, AlertTriangle, BarChart3, ArrowLef
 import { formatBRL, findCategory } from '@/lib/helpers'
 import AreaChart from '../AreaChart'
 import DonutChart from '../DonutChart'
+import CategoryIcon from '../CategoryIcon'
 
 export default function DashboardModule({ ctx }) {
   const { summary, prevSummary, history, chartData, insights, allTransactions, recurringTotal, activeRecurring, currentMonth, isCurrentRealMonth, todayDay, go } = ctx
@@ -125,7 +126,7 @@ export default function DashboardModule({ ctx }) {
                 {chartData.map((s) => (
                   <div className="legend-row" key={s.id}>
                     <span className="sw" style={{ background: s.color }} />
-                    <span className="nm">{s.emoji} {s.label}</span>
+                    <span className="nm"><CategoryIcon id={s.id} size={15} color={s.color} /> {s.label}</span>
                     <span className="pc">{Math.round((s.value / M.totalExpenses) * 100)}%</span>
                     <span className="vl">{formatBRL(s.value)}</span>
                   </div>
