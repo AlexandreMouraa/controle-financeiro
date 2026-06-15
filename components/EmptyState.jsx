@@ -1,6 +1,6 @@
-import { Wallet, Plus } from 'lucide-react'
+import { Wallet, Plus, Upload } from 'lucide-react'
 
-export default function EmptyState({ onAddIncome, onAddExpense }) {
+export default function EmptyState({ onAddIncome, onAddExpense, onRestore }) {
   return (
     <div className="card" style={{ padding: 32, textAlign: 'center' }}>
       <div style={{
@@ -16,6 +16,7 @@ export default function EmptyState({ onAddIncome, onAddExpense }) {
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button className="btn-solid" style={{ flex: 'none', padding: '12px 22px' }} onClick={onAddIncome}>Definir renda</button>
         <button className="btn-ghost" onClick={onAddExpense}><Plus size={15} /> Adicionar despesa</button>
+        <button className="btn-ghost" onClick={onRestore}><Upload size={15} /> Restaurar backup</button>
       </div>
     </div>
   )

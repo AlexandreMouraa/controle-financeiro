@@ -1,4 +1,4 @@
-function Block({ h, w = '100%', r = 16, mb = 0 }) {
+function Block({ h, w = '100%', r = 14, mb = 0 }) {
   return (
     <div
       className="animate-fade-in-up"
@@ -12,19 +12,33 @@ function Block({ h, w = '100%', r = 16, mb = 0 }) {
 
 export default function DashboardSkeleton() {
   return (
-    <div className="wrap">
-      <div style={{ padding: '26px 0 18px' }}><Block h={20} w={120} r={100} /></div>
-      <Block h={56} w="60%" mb={24} />
-      <div className="grid" style={{ marginTop: 8 }}>
-        <div className="col">
-          <Block h={170} />
-          <Block h={90} />
-          <Block h={210} />
+    <div className="app">
+      {/* sidebar */}
+      <aside className="sidebar">
+        <div className="sb-brand"><span className="mark">F</span><span className="nm">FinTrack</span></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+          {Array.from({ length: 7 }).map((_, i) => <Block key={i} h={36} r={10} />)}
         </div>
-        <div className="col">
-          <Block h={260} />
-          <Block h={180} />
-        </div>
+      </aside>
+
+      {/* main */}
+      <div className="main">
+        <header className="topbar">
+          <Block h={36} w={36} r={9} />
+          <div style={{ marginLeft: 4 }}><Block h={22} w={160} r={6} mb={6} /><Block h={12} w={120} r={6} /></div>
+        </header>
+        <main className="content">
+          <div className="page">
+            <div className="kpi-grid">
+              {Array.from({ length: 4 }).map((_, i) => <Block key={i} h={108} r={15} />)}
+            </div>
+            <Block h={264} r={16} />
+            <div className="grid-2">
+              <Block h={240} r={16} />
+              <Block h={240} r={16} />
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   )

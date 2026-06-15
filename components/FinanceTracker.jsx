@@ -2,37 +2,46 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight,
-  Trash2, Target, Repeat, Download, BarChart3, CreditCard,
-  Upload, Sun, Moon, Pencil, LogOut, Lightbulb, Shield, Wallet, CalendarClock,
+  Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Menu,
+  Sun, Moon, LogOut, LayoutDashboard, ArrowLeftRight, CreditCard,
+  Target, CalendarDays, BarChart3, Tag, Settings, Repeat,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import * as db from '@/lib/db'
 import { CATEGORIES, THEME_KEY } from '@/lib/constants'
 import {
-  formatBRL, monthKey, monthLabel, emptyMonth, shiftMonth, computeMonthSummary,
-  findCategory, findCard, migrateData, getInstallmentInfo, computeGoalProgress,
-  computeInsights, computeReserveProgress,
+  monthKey, monthLabel, emptyMonth, shiftMonth, computeMonthSummary,
+  findCategory, findCard, migrateData, computeGoalProgress, computeInsights,
+  computeReserveProgress, computeHistory, deriveDebts, derivePlanning,
 } from '@/lib/helpers'
 
-import BankLogo from './BankLogo'
 import Modal from './Modal'
 import CardsModal from './CardsModal'
 import IncomeHistoryModal from './IncomeHistoryModal'
 import ToastContainer from './Toast'
 import ConfirmDialog from './ConfirmDialog'
-import ProgressRing from './ProgressRing'
-import DonutChart from './DonutChart'
-import Sparkline from './Sparkline'
 import DashboardSkeleton from './DashboardSkeleton'
 import EmptyState from './EmptyState'
 
-const splitBRL = (n) => {
-  const s = Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const [reais, cents] = s.split(',')
-  return { reais, cents }
-}
+import DashboardModule from './modules/DashboardModule'
+import TransacoesModule from './modules/TransacoesModule'
+import { DividasModule, MetasModule } from './modules/DividasMetasModule'
+import { PlanejamentoModule, RelatoriosModule } from './modules/PlanejamentoRelatoriosModule'
+import { CategoriasModule, ConfiguracoesModule } from './modules/CategoriasConfigModule'
+import FixasModule from './modules/FixasModule'
+
+const NAV = [
+  { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard, title: 'Dashboard', crumb: 'Resumo executivo do mês' },
+  { id: 'transacoes', label: 'Transações', Icon: ArrowLeftRight, title: 'Transações', crumb: 'Todas as movimentações' },
+  { id: 'fixas', label: 'Despesas fixas', Icon: Repeat, title: 'Despesas fixas', crumb: 'Contas recorrentes do mês' },
+  { id: 'dividas', label: 'Dívidas', Icon: CreditCard, title: 'Dívidas', crumb: 'Parcelamentos e quitação' },
+  { id: 'metas', label: 'Metas', Icon: Target, title: 'Metas financeiras', crumb: 'Objetivos e poupança' },
+  { id: 'planejamento', label: 'Planejamento', Icon: CalendarDays, title: 'Planejamento', crumb: 'Calendário e fluxo futuro' },
+  { id: 'relatorios', label: 'Relatórios', Icon: BarChart3, title: 'Relatórios', crumb: 'Análises financeiras' },
+  { id: 'categorias', label: 'Categorias', Icon: Tag, title: 'Categorias', crumb: 'Organização e orçamentos' },
+  { id: 'configuracoes', label: 'Configurações', Icon: Settings, title: 'Configurações', crumb: 'Preferências e dados' },
+]
 
 export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
@@ -48,8 +57,11 @@ export default function FinanceTracker() {
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [theme, setTheme] = useState('light')
   const [loggingOut, setLoggingOut] = useState(false)
-  const [tab, setTab] = useState('panorama')
+  const [page, setPage] = useState('dashboard')
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   const fileInputRef = useRef(null)
   const userIdRef = useRef(null)
   const [toasts, setToasts] = useState([])
@@ -80,20 +92,33 @@ export default function FinanceTracker() {
     }
 
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) { setLoaded(true); return }
+      if (!user) {
+        // sessão podre: renderizar o dashboard sem userId deixava tudo vazio
+        // e toda gravação falhava — limpa a sessão e volta pro login
+        supabase.auth.signOut({ scope: 'local' }).finally(() => {
+          window.location.replace('/login')
+        })
+        return
+      }
       userIdRef.current = user.id
+      setUserEmail(user.email || '')
       db.loadAllData(user.id).then(({ data: fetchedData, error }) => {
-        if (error) console.error('Erro ao carregar dados:', error)
-        else if (fetchedData) setData(fetchedData)
+        if (error) {
+          console.error('Erro ao carregar dados:', error)
+          addToast('Erro ao carregar seus dados. Recarregue a página.')
+        } else if (fetchedData) setData(fetchedData)
         setLoaded(true)
       })
-    })
+    }).catch(() => window.location.replace('/login'))
   }, [])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
+
+  // fecha o drawer mobile ao trocar de página
+  useEffect(() => { setMobileOpen(false) }, [page])
 
   const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
 
@@ -114,26 +139,15 @@ export default function FinanceTracker() {
     recurringTotal, mainIncome, totalExtras, totalIncome,
     variableExpensesTotal, totalExpenses, balance,
   } = computeMonthSummary(data, currentMonth)
-  const isRed = balance < 0
+  const summary = { recurringTotal, mainIncome, totalExtras, totalIncome, variableExpensesTotal, totalExpenses, balance }
+  const prevSummary = computeMonthSummary(data, shiftMonth(currentMonth, -1))
   const goalInfo = computeGoalProgress(data, currentMonth)
   const reserveInfo = computeReserveProgress(data, currentMonth)
   const insights = computeInsights(data, currentMonth)
   const userCards = data.cards.map((id) => findCard(id)).filter(Boolean)
-
-  const prevBalance = computeMonthSummary(data, shiftMonth(currentMonth, -1)).balance
-  const balanceDelta = balance - prevBalance
-  const prevMonthShort = monthLabel(shiftMonth(currentMonth, -1)).split(' de ')[0]
-  const sparkValues = Array.from({ length: 6 }, (_, i) =>
-    computeMonthSummary(data, shiftMonth(currentMonth, i - 5)).balance
-  )
-  const committedPct = totalIncome > 0 ? totalExpenses / totalIncome : 0
-  const health = isRed
-    ? { label: 'No vermelho', cls: 'debt' }
-    : goalInfo?.done
-    ? { label: 'Meta batida', cls: '' }
-    : committedPct >= 0.9
-    ? { label: 'Atenção', cls: 'warn' }
-    : { label: 'Tranquilo', cls: '' }
+  const history = computeHistory(data, currentMonth, 6)
+  const debts = deriveDebts(data, currentMonth)
+  const planning = derivePlanning(data, currentMonth)
 
   const hasAnyData =
     data.incomeHistory.length > 0 ||
@@ -145,7 +159,6 @@ export default function FinanceTracker() {
     Object.values(data.monthlyData).some((m) => m.expenses.length > 0 || m.extras.length > 0)
   const isEmpty = loaded && hasAnyData === false
 
-  // Para destacar vencimentos só no mês real corrente.
   const realMonth = monthKey(new Date())
   const todayDay = new Date().getDate()
   const isCurrentRealMonth = currentMonth === realMonth
@@ -164,7 +177,11 @@ export default function FinanceTracker() {
       return { catId, label: cat?.label || 'Outros', emoji: cat?.emoji || '📦', color: cat?.color || '#8a8378', limit, spent, pct: limit > 0 ? spent / limit : 0 }
     })
     .sort((a, b) => b.pct - a.pct)
-  const unbudgetedCategories = CATEGORIES.filter((c) => !(c.id in data.budgets))
+
+  const allTransactions = [
+    ...monthData.extras.map((e) => ({ ...e, type: 'extra' })),
+    ...monthData.expenses.map((e) => ({ ...e, type: 'expense' })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
   const updateMonth = (updater) =>
     setData((prev) => ({
@@ -269,6 +286,25 @@ export default function FinanceTracker() {
       console.error('Erro ao remover despesa:', error)
       updateMonth((m) => ({ ...m, expenses: prev }))
       addToast('Erro ao remover despesa.')
+    }
+  }
+
+  // Remove uma transação de qualquer mês (usado na tabela de Transações).
+  const removeTransaction = async (t) => {
+    const month = t.date.slice(0, 7)
+    const key = t.type === 'extra' ? 'extras' : 'expenses'
+    const prevMonth = data.monthlyData[month]
+    setData((d) => {
+      const md = d.monthlyData[month] || emptyMonth()
+      return { ...d, monthlyData: { ...d.monthlyData, [month]: { ...md, [key]: md[key].filter((x) => x.id !== t.id) } } }
+    })
+    const { error } = t.type === 'extra'
+      ? await db.deleteExtra(userIdRef.current, t.id)
+      : await db.deleteExpense(userIdRef.current, t.id)
+    if (error) {
+      console.error('Erro ao remover transação:', error)
+      setData((d) => ({ ...d, monthlyData: { ...d.monthlyData, [month]: prevMonth } }))
+      addToast('Erro ao remover transação.')
     }
   }
 
@@ -425,13 +461,6 @@ export default function FinanceTracker() {
     setCurrentMonth(monthKey(new Date(y, m - 1 + delta, 1)))
   }
 
-  const allTransactions = [
-    ...monthData.extras.map((e) => ({ ...e, type: 'extra' })),
-    ...monthData.expenses.map((e) => ({ ...e, type: 'expense' })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date))
-
-  const movimentacoesNet = totalExtras - variableExpensesTotal
-
   const exportBackup = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -470,439 +499,135 @@ export default function FinanceTracker() {
 
   if (!loaded) return <DashboardSkeleton />
 
-  const hero = splitBRL(balance)
-  const insightIcon = { good: Lightbulb, warn: TrendingUp, bad: TrendingDown, info: Lightbulb }
+  const dividasAbertas = debts.filter((d) => !d.quitada).length
+  const nav = NAV.find((n) => n.id === page) || NAV[0]
+  const userName = userEmail ? userEmail.split('@')[0] : 'Você'
+  const initials = (userEmail || 'VC').slice(0, 2).toUpperCase()
+
+  // contexto compartilhado pelos módulos
+  const ctx = {
+    data, currentMonth, summary, prevSummary, history, debts, planning,
+    chartData, insights, goalInfo, reserveInfo, budgetList, userCards,
+    expensesByCategory, recurringTotal, allTransactions,
+    activeRecurring, disabledIds,
+    isCurrentRealMonth, todayDay, theme,
+    go: setPage, openModal: setModal, toggleTheme, askConfirm,
+    removeTransaction, removeGoal, removeReserve, removeBudget, setEditingBudget,
+    setEditingRecurring, toggleRecurringForMonth, removeRecurring,
+    exportBackup, fileInputRef,
+  }
+
+  const renderPage = () => {
+    // estado vazio: só Configurações fica acessível (restaurar backup, tema, cartões)
+    if (isEmpty && page !== 'configuracoes') {
+      return <EmptyState onAddIncome={() => setModal('income')} onAddExpense={() => setModal('expense')} onRestore={() => fileInputRef.current?.click()} />
+    }
+    switch (page) {
+      case 'transacoes': return <TransacoesModule ctx={ctx} />
+      case 'fixas': return <FixasModule ctx={ctx} />
+      case 'dividas': return <DividasModule ctx={ctx} />
+      case 'metas': return <MetasModule ctx={ctx} />
+      case 'planejamento': return <PlanejamentoModule ctx={ctx} />
+      case 'relatorios': return <RelatoriosModule ctx={ctx} />
+      case 'categorias': return <CategoriasModule ctx={ctx} />
+      case 'configuracoes': return <ConfiguracoesModule ctx={ctx} />
+      default: return <DashboardModule ctx={ctx} />
+    }
+  }
+
+  const showMonthNav = !isEmpty && page !== 'configuracoes' && page !== 'transacoes'
 
   return (
-    <div className="wrap">
-      {/* top bar */}
-      <header className="topbar reveal">
-        <div className="brand">
-          <span className="logo"><span className="dot" />Fin<em style={{ fontStyle: 'normal', color: 'var(--accent-ink)' }}>Track</em></span>
-          {!isEmpty && <span className={`status-pill ${health.cls}`}>{health.label}</span>}
-        </div>
-        <div className="topbar-right">
-          <button className="icon-btn" title="Tema" onClick={toggleTheme} aria-label="Alternar tema">
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
-          <button className="icon-btn" title="Sair" onClick={handleLogout} disabled={loggingOut} aria-label="Sair">
-            <LogOut size={17} />
-          </button>
-        </div>
-      </header>
+    <div className={'app' + (collapsed ? ' collapsed' : '') + (mobileOpen ? ' mobile-open' : '')}>
+      <div className="scrim" onClick={() => setMobileOpen(false)} />
 
-      {/* masthead */}
-      <div className="masthead reveal" style={{ animationDelay: '.04s' }}>
-        <h1>Suas <em>finanças</em><br />do mês</h1>
-        <div className="month-nav">
-          <button className="arrow" onClick={() => changeMonth(-1)} aria-label="Mês anterior"><ChevronLeft size={18} /></button>
-          <span className="label">{monthLabel(currentMonth)}</span>
-          <button className="arrow" onClick={() => changeMonth(1)} aria-label="Próximo mês"><ChevronRight size={18} /></button>
+      {/* SIDEBAR */}
+      <aside className="sidebar">
+        <div className="sb-brand">
+          <span className="mark">F</span>
+          <span className="nm">FinTrack</span>
         </div>
-      </div>
-
-      {!isEmpty && (
-        <nav className="tabs reveal" style={{ animationDelay: '.08s' }}>
-          <button className={'tab' + (tab === 'panorama' ? ' active' : '')} onClick={() => setTab('panorama')}>Panorama</button>
-          <button className={'tab' + (tab === 'ajustes' ? ' active' : '')} onClick={() => setTab('ajustes')}>Ajustes</button>
+        <nav className="sb-nav">
+          {NAV.slice(0, 7).map((n) => (
+            <button key={n.id} className={'nav-item' + (page === n.id ? ' active' : '')} onClick={() => setPage(n.id)} title={n.label}>
+              <span className="ic"><n.Icon size={19} /></span>
+              <span className="lbl">{n.label}</span>
+              {n.id === 'dividas' && dividasAbertas > 0 && <span className="nav-badge">{dividasAbertas}</span>}
+            </button>
+          ))}
+          <div className="sb-section">Configuração</div>
+          {NAV.slice(7).map((n) => (
+            <button key={n.id} className={'nav-item' + (page === n.id ? ' active' : '')} onClick={() => setPage(n.id)} title={n.label}>
+              <span className="ic"><n.Icon size={19} /></span>
+              <span className="lbl">{n.label}</span>
+            </button>
+          ))}
         </nav>
-      )}
-
-      {isEmpty ? (
-        <div style={{ marginTop: 24 }}>
-          <EmptyState onAddIncome={() => setModal('income')} onAddExpense={() => setModal('expense')} />
-        </div>
-      ) : tab === 'panorama' ? (
-        <div className="grid">
-          {/* ---------- LEFT ---------- */}
-          <div className="col">
-            {/* hero saldo */}
-            <section className="card hero reveal" style={{ animationDelay: '.12s' }}>
-              <div className="eyebrow" style={{ marginBottom: 14 }}>{isRed ? 'No vermelho' : 'Saldo do mês'}</div>
-              <div className="hero-row">
-                <div>
-                  <div className={'amount' + (isRed ? ' debt' : '')}>
-                    <span className="cur">R$</span>
-                    <span>{isRed ? '−' : ''}{hero.reais}<span className="cents">,{hero.cents}</span></span>
-                  </div>
-                  <div className="hero-sub">
-                    <span><b>{formatBRL(totalIncome)}</b> entrou</span>
-                    <span style={{ color: 'var(--faint)' }}>·</span>
-                    <span><b>{formatBRL(totalExpenses)}</b> saiu</span>
-                    {balanceDelta !== 0 && (
-                      <span className={'delta ' + (balanceDelta > 0 ? 'up' : 'down')}>
-                        {balanceDelta > 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                        {formatBRL(Math.abs(balanceDelta))} vs. {prevMonthShort}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <Sparkline values={sparkValues} />
-              </div>
-              <div className="renda-line">
-                <span className="lbl">
-                  Renda principal
-                  {data.incomeHistory.length > 1 && (
-                    <span className="hist" onClick={() => setModal('incomeHistory')}>{data.incomeHistory.length} alterações no histórico</span>
-                  )}
-                </span>
-                <span className="val">
-                  <span className="mono" style={{ fontSize: 15, fontWeight: 500 }}>{formatBRL(mainIncome)}</span>
-                  <button className="linkbtn" onClick={() => setModal('income')}>{mainIncome > 0 ? 'Editar' : 'Definir'}</button>
-                </span>
-              </div>
-            </section>
-
-            {/* insights */}
-            {insights.length > 0 && (
-              <div className="chips reveal" style={{ animationDelay: '.16s' }}>
-                {insights.map((ins) => {
-                  const Ic = insightIcon[ins.tone] || Lightbulb
-                  const cls = ins.tone === 'bad' ? 'bad' : ins.tone === 'warn' ? 'warn' : 'good'
-                  return (
-                    <div className={`chip ${cls}`} key={ins.id}>
-                      <span className="ic"><Ic size={16} /></span>
-                      <span>{ins.text}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* fluxo */}
-            <section className="card reveal" style={{ animationDelay: '.2s' }}>
-              <div className="flow-split">
-                <div className="flow-item">
-                  <div className="eyebrow"><TrendingUp size={13} /> Entradas</div>
-                  <div className="v">{formatBRL(totalIncome)}</div>
-                  <div className="meta">Renda + {monthData.extras.length} {monthData.extras.length === 1 ? 'extra' : 'extras'}</div>
-                </div>
-                <div className="divider" />
-                <div className="flow-item">
-                  <div className="eyebrow"><TrendingDown size={13} /> Saídas</div>
-                  <div className="v">{formatBRL(totalExpenses)}</div>
-                  <div className="meta">{activeRecurring.length} fixas + {monthData.expenses.length} variáveis</div>
-                </div>
-              </div>
-              {totalIncome > 0 && (
-                <div className="bar-wrap">
-                  <div className="bar-head">
-                    <span style={{ color: 'var(--muted)' }}>Renda comprometida</span>
-                    <span className="pct">{Math.round(committedPct * 100)}%</span>
-                  </div>
-                  <div className="bar">
-                    <span className={committedPct >= 1 ? 'debt' : committedPct >= 0.9 ? 'warn' : ''} style={{ width: `${Math.min(committedPct, 1) * 100}%` }} />
-                  </div>
-                  <div className="bar-foot">
-                    {committedPct >= 1
-                      ? 'Você gastou mais do que ganhou este mês.'
-                      : <>Sobram <b>{formatBRL(totalIncome - totalExpenses)}</b> da sua renda.</>}
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* gastos por categoria */}
-            {chartData.length > 0 && (
-              <section className="card reveal" style={{ animationDelay: '.24s' }}>
-                <div className="card-head"><div className="eyebrow"><BarChart3 size={13} /> Gastos por categoria</div></div>
-                <div className="donut-wrap">
-                  <DonutChart data={chartData} total={totalExpenses} />
-                  <div className="legend">
-                    {chartData.map((s) => (
-                      <div className="legend-row" key={s.id}>
-                        <span className="sw" style={{ background: s.color }} />
-                        <span className="nm">{s.emoji} {s.label}</span>
-                        <span className="pc">{Math.round((s.value / totalExpenses) * 100)}%</span>
-                        <span className="vl">{formatBRL(s.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* meta poupança */}
-            <section className="card reveal" style={{ animationDelay: '.28s' }}>
-              <div className="card-head">
-                <div className="eyebrow"><Target size={13} /> Meta de poupança</div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="linkbtn" onClick={() => setModal('goal')}>{goalInfo ? 'Editar' : 'Definir'}</button>
-                  {goalInfo && (
-                    <button className="linkbtn danger" onClick={() => askConfirm('Excluir a meta de poupança?', 'Excluir').then((ok) => { if (ok) removeGoal() })}>Excluir</button>
-                  )}
-                </div>
-              </div>
-              {goalInfo ? (
-                <div className="meta-card">
-                  <ProgressRing progress={goalInfo.progress} />
-                  <div className="meta-info">
-                    <div className="amt">{formatBRL(goalInfo.saved)}</div>
-                    <div className="of">de {formatBRL(goalInfo.totalAmount)} · termina em {monthLabel(goalInfo.endMonth)}</div>
-                    <div className="note">
-                      {goalInfo.done
-                        ? `Meta batida! Você juntou ${formatBRL(goalInfo.saved)}. 🎉`
-                        : goalInfo.notStarted
-                        ? `Começa em ${monthLabel(goalInfo.startMonth)}.`
-                        : goalInfo.ended
-                        ? `Período encerrado. Juntou ${formatBRL(goalInfo.saved)}.`
-                        : `Faltam ${formatBRL(goalInfo.remainingAmount)}${goalInfo.monthsRemaining > 0 ? ` · ${formatBRL(goalInfo.requiredRate)}/mês` : ''}`}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-box">Sem meta definida. Diga quanto quer juntar e em quantos meses — o app acumula o que sobra de cada mês.</div>
-              )}
-            </section>
+        <div className="sb-foot">
+          <div className="sb-user">
+            <span className="av">{initials}</span>
+            <div className="meta">
+              <div className="n">{userName}</div>
+              <div className="e">{userEmail}</div>
+            </div>
           </div>
+          <button className="nav-item" onClick={handleLogout} disabled={loggingOut} title="Sair">
+            <span className="ic"><LogOut size={19} /></span>
+            <span className="lbl">Sair</span>
+          </button>
+        </div>
+      </aside>
 
-          {/* ---------- RIGHT ---------- */}
-          <div className="col">
-            {/* despesas fixas */}
-            <section className="card reveal" style={{ animationDelay: '.14s' }}>
-              <div className="card-head">
-                <div className="eyebrow"><Repeat size={13} /> Despesas fixas</div>
-                <button className="btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setModal('recurring')}><Plus size={14} /> Adicionar</button>
-              </div>
-              <div className="ledger-head">
-                <div>
-                  <div className="ledger-total">{formatBRL(recurringTotal)}</div>
-                  <div className="ledger-sub">{activeRecurring.length} de {data.recurring.length} ativas neste mês</div>
-                </div>
-              </div>
-              {data.recurring.length > 0 ? (
-                <div className="rows">
-                  {data.recurring.map((r) => {
-                    const cat = findCategory(r.category)
-                    const col = cat?.color || '#8a8378'
-                    const card = r.cardId ? findCard(r.cardId) : null
-                    const off = disabledIds.includes(r.id)
-                    const installInfo = getInstallmentInfo(r, currentMonth)
-                    let dueTxt = null, dueCls = ''
-                    if (r.dueDay) {
-                      const live = isCurrentRealMonth && !off
-                      const diff = r.dueDay - todayDay
-                      if (live && diff < 0) { dueTxt = `venceu dia ${r.dueDay}`; dueCls = 'debt' }
-                      else if (live && diff === 0) { dueTxt = 'vence hoje'; dueCls = 'warn' }
-                      else if (live && diff <= 5) { dueTxt = `vence em ${diff} ${diff === 1 ? 'dia' : 'dias'}`; dueCls = 'warn' }
-                      else dueTxt = `vence dia ${r.dueDay}`
-                    }
-                    return (
-                      <div className={'row' + (off ? ' off' : '')} key={r.id}>
-                        <div className="main">
-                          <span className="ic-cell" style={{ background: `color-mix(in oklab, ${col} 16%, transparent)`, color: col }}>
-                            <span className="cat-dot" style={{ background: col }} />
-                          </span>
-                          <div style={{ minWidth: 0 }}>
-                            <div className={'nm' + (off ? ' off-text' : '')}>{r.description}</div>
-                            <div className="tag">
-                              <span>{cat?.label || 'Outros'}</span>
-                              {installInfo && (<><span className="sep">·</span><span className={installInfo.remaining <= 0 ? 'good' : ''}>{installInfo.total}x · {installInfo.remaining > 0 ? `${installInfo.remaining} restantes` : 'Quitado'}</span></>)}
-                              {dueTxt && (<><span className="sep">·</span><span className={dueCls}>{dueTxt}</span></>)}
-                              {card && (<><span className="sep">·</span><span>{card.name}</span></>)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="amt neg">{formatBRL(r.amount)}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <button className={'toggle' + (off ? '' : ' on')} onClick={() => toggleRecurringForMonth(r.id)} title={off ? 'Pausada' : 'Ativa'} />
-                          <div className="row-actions">
-                            <button onClick={() => setEditingRecurring(r)} aria-label="Editar"><Pencil size={14} /></button>
-                            <button className="del" onClick={() => askConfirm(`Remover "${r.description}" das despesas fixas?`, 'Remover').then((ok) => { if (ok) removeRecurring(r.id) })} aria-label="Remover"><Trash2 size={14} /></button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="empty-box">Cadastre aluguel, internet, assinaturas. Cada uma conta automaticamente todo mês.</div>
-              )}
-            </section>
-
-            {/* movimentações */}
-            <section className="card reveal" style={{ animationDelay: '.18s' }}>
-              <div className="card-head">
-                <div>
-                  <div className="eyebrow">Movimentações do mês</div>
-                  <div className="ledger-sub" style={{ marginTop: 4 }}>Ganhos extras e despesas variáveis</div>
-                </div>
-              </div>
-              {allTransactions.length > 0 && (
-                <div className="ledger-head">
-                  <div>
-                    <div className="ledger-total" style={{ color: movimentacoesNet >= 0 ? 'var(--accent-ink)' : 'var(--debt)' }}>
-                      {movimentacoesNet >= 0 ? '+ ' : '− '}{formatBRL(Math.abs(movimentacoesNet))}
-                    </div>
-                    <div className="ledger-sub">{formatBRL(totalExtras)} em ganhos − {formatBRL(variableExpensesTotal)} em despesas</div>
-                  </div>
-                </div>
-              )}
-              {allTransactions.length > 0 ? (
-                <div className="rows">
-                  {allTransactions.map((t) => {
-                    const pos = t.type === 'extra'
-                    const cat = findCategory(t.category)
-                    const col = pos ? 'var(--accent)' : (cat?.color || '#8a8378')
-                    const card = t.cardId ? findCard(t.cardId) : null
-                    return (
-                      <div className="row" key={`${t.type}-${t.id}`}>
-                        <div className="main">
-                          <span className="ic-cell" style={{ background: `color-mix(in oklab, ${col} 16%, transparent)`, color: col }}>
-                            {pos ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                          </span>
-                          <div style={{ minWidth: 0 }}>
-                            <div className="nm">{t.description}</div>
-                            <div className="tag">
-                              <span>{new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
-                              <span className="sep">·</span>
-                              <span>{pos ? 'ganho extra' : (cat?.label || 'Outros')}</span>
-                              {card && (<><span className="sep">·</span><span>{card.name}</span></>)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className={'amt ' + (pos ? 'pos' : 'neg')}>{pos ? '+' : '−'} {formatBRL(t.amount)}</div>
-                        <div className="row-actions">
-                          <button onClick={() => setEditingTransaction(t)} aria-label="Editar"><Pencil size={14} /></button>
-                          <button className="del" onClick={() => pos ? removeExtra(t.id) : removeExpense(t.id)} aria-label="Remover"><Trash2 size={14} /></button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="empty-box">Ainda nada por aqui. Use o botão + pra lançar um ganho extra ou uma despesa.</div>
-              )}
-            </section>
+      {/* MAIN */}
+      <div className="main">
+        <header className="topbar">
+          <button className="icon-btn" onClick={() => { if (window.innerWidth <= 860) setMobileOpen((o) => !o); else setCollapsed((c) => !c) }} title="Menu" aria-label="Menu"><Menu size={18} /></button>
+          <div className="tb-title">
+            <h1>{nav.title}</h1>
+            <div className="crumb">{nav.crumb}</div>
           </div>
-        </div>
-      ) : (
-        /* ---------- AJUSTES ---------- */
-        <div className="set-grid reveal" style={{ animationDelay: '.1s' }}>
-          {/* reserva */}
-          <section className="card set-card">
-            <div className="card-head">
-              <div className="eyebrow"><Shield size={13} /> Reserva de emergência</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="linkbtn" onClick={() => setModal('reserve')}>{reserveInfo ? 'Editar' : 'Definir'}</button>
-                {reserveInfo && (
-                  <button className="linkbtn danger" onClick={() => askConfirm('Excluir a reserva de emergência?', 'Excluir').then((ok) => { if (ok) removeReserve() })}>Excluir</button>
-                )}
-              </div>
+          <div className="tb-spacer" />
+          {showMonthNav && (
+            <div className="tb-month">
+              <button className="arrow" onClick={() => changeMonth(-1)} aria-label="Mês anterior"><ChevronLeft size={16} /></button>
+              <span className="lbl">{monthLabel(currentMonth)}</span>
+              <button className="arrow" onClick={() => changeMonth(1)} aria-label="Próximo mês"><ChevronRight size={16} /></button>
             </div>
-            {reserveInfo ? (
-              <div className="meta-card">
-                <ProgressRing progress={reserveInfo.progress} />
-                <div className="meta-info">
-                  <div className="amt">{formatBRL(reserveInfo.currentAmount)}</div>
-                  <div className="of">de {formatBRL(reserveInfo.target)} · {reserveInfo.targetMonths} {reserveInfo.targetMonths === 1 ? 'mês' : 'meses'} de fixas</div>
-                  <div className="note">
-                    {reserveInfo.done
-                      ? `Reserva completa! Cobre ${reserveInfo.targetMonths} ${reserveInfo.targetMonths === 1 ? 'mês' : 'meses'}. 🛟`
-                      : reserveInfo.monthlyNeed > 0
-                      ? `Cobre ${reserveInfo.monthsCovered.toFixed(1)} meses hoje · faltam ${formatBRL(reserveInfo.remaining)}`
-                      : 'Cadastre suas despesas fixas pra calcular a meta.'}
+          )}
+          {!isEmpty && (
+            <div className="tb-new">
+              <button className="btn-solid" onClick={() => setFabOpen((o) => !o)} aria-expanded={fabOpen}><Plus size={15} /> Novo</button>
+              {fabOpen && (
+                <>
+                  <div className="menu-scrim" onClick={() => setFabOpen(false)} />
+                  <div className="tb-menu">
+                    <button onClick={() => { setModal('extra'); setFabOpen(false) }}><TrendingUp size={16} /> Ganho extra</button>
+                    <button onClick={() => { setModal('expense'); setFabOpen(false) }}><TrendingDown size={16} /> Despesa</button>
+                    <button onClick={() => { setModal('recurring'); setFabOpen(false) }}><Repeat size={16} /> Despesa fixa</button>
                   </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                <p>Sem reserva definida. Guarde o equivalente a alguns meses de despesa fixa pra imprevistos — perda de renda, conserto inesperado. Diga quanto já tem e quantos meses quer cobrir.</p>
-                <div className="empty-box">Sugestão: com {formatBRL(recurringTotal)}/mês de fixas, uma reserva de 3 meses seria ~{formatBRL(recurringTotal * 3)}.</div>
-              </>
-            )}
-          </section>
-
-          {/* cartões */}
-          <section className="card set-card">
-            <div className="card-head">
-              <div className="eyebrow"><CreditCard size={13} /> Cartões</div>
-              <button className="btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setModal('cards')}><Plus size={14} /> Gerenciar</button>
-            </div>
-            <p>Marque o cartão ao lançar despesas pra ver pra onde a grana tá indo.</p>
-            {userCards.length > 0 ? (
-              <div className="cards-list">
-                {userCards.map((c) => (
-                  <span className="card-pill" key={c.id}><BankLogo id={c.id} size={22} />{c.name}</span>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-box">Cadastre os bancos/cartões que você usa (Nubank, Santander, C6, etc).</div>
-            )}
-          </section>
-
-          {/* orçamentos */}
-          <section className="card set-card">
-            <div className="card-head">
-              <div className="eyebrow"><Wallet size={13} /> Orçamentos</div>
-              {unbudgetedCategories.length > 0 && (
-                <button className="btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setModal('budget')}><Plus size={14} /> Adicionar</button>
+                </>
               )}
             </div>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--ink)', fontWeight: 500, margin: '2px 0 4px' }}>
-              {budgetList.length} {budgetList.length === 1 ? 'categoria' : 'categorias'}
-            </p>
-            {budgetList.length > 0 ? (
-              <div style={{ marginTop: 8 }}>
-                {budgetList.map((b) => {
-                  const over = b.spent > b.limit
-                  const near = !over && b.pct >= 0.8
-                  return (
-                    <div className="budget-item" key={b.catId}>
-                      <div className="top">
-                        <span className="nm">{b.emoji} {b.label}</span>
-                        <span className="vals">
-                          <span style={over ? { color: 'var(--debt)' } : undefined}>{formatBRL(b.spent)}</span>
-                          <span className="lim">/ {formatBRL(b.limit)}</span>
-                          <button className="linkbtn" onClick={() => setEditingBudget({ category: b.catId, amount: b.limit })}><Pencil size={12} /></button>
-                          <button className="linkbtn danger" onClick={() => askConfirm(`Remover o orçamento de ${b.label}?`, 'Remover').then((ok) => { if (ok) removeBudget(b.catId) })}><Trash2 size={12} /></button>
-                        </span>
-                      </div>
-                      <div className="bar"><span className={over ? 'debt' : near ? 'warn' : ''} style={{ width: `${Math.min(b.pct, 1) * 100}%` }} /></div>
-                      <div className="foot" style={over ? { color: 'var(--debt)' } : near ? { color: 'var(--warn)' } : undefined}>
-                        {over ? `Passou ${formatBRL(b.spent - b.limit)} do teto.` : `Sobram ${formatBRL(b.limit - b.spent)} este mês.`}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <>
-                <p>Defina um teto mensal e acompanhe quanto já gastou.</p>
-                <div className="empty-box">Ex.: teto de Alimentação R$ 800 → o app mostra uma barra de quanto você já comprometeu no mês.</div>
-              </>
-            )}
-          </section>
+          )}
+          <button className="icon-btn" title="Tema" onClick={toggleTheme} aria-label="Alternar tema">{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
+        </header>
 
-          {/* backup */}
-          <section className="card set-card">
-            <div className="card-head"><div className="eyebrow"><Download size={13} /> Backup completo</div></div>
-            <p>Salva tudo num arquivo JSON. Útil pra mover de PC ou guardar uma cópia segura.</p>
-            <div className="backup-btns">
-              <button className="btn-ghost" onClick={exportBackup}><Download size={15} /> Salvar backup</button>
-              <button className="btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Restaurar backup</button>
-              <input type="file" accept=".json" ref={fileInputRef} onChange={importBackup} style={{ display: 'none' }} />
-            </div>
-          </section>
-        </div>
-      )}
+        <main className="content" key={page}>
+          {renderPage()}
+        </main>
+      </div>
 
       {/* FAB */}
       {!isEmpty && (
         <div className="fab-zone">
           {fabOpen && (
             <div className="fab-menu">
-              <button className="fab-action in" onClick={() => { setModal('extra'); setFabOpen(false) }}>
-                <TrendingUp size={17} /> Ganho extra
-              </button>
-              <button className="fab-action out" style={{ animationDelay: '.05s' }} onClick={() => { setModal('expense'); setFabOpen(false) }}>
-                <TrendingDown size={17} /> Despesa
-              </button>
+              <button className="fab-action in" onClick={() => { setModal('extra'); setFabOpen(false) }}><TrendingUp size={17} /> Ganho extra</button>
+              <button className="fab-action out" style={{ animationDelay: '.05s' }} onClick={() => { setModal('expense'); setFabOpen(false) }}><TrendingDown size={17} /> Despesa</button>
+              <button className="fab-action out" style={{ animationDelay: '.1s' }} onClick={() => { setModal('recurring'); setFabOpen(false) }}><Repeat size={17} /> Despesa fixa</button>
             </div>
           )}
-          <button className={'fab' + (fabOpen ? ' open' : '')} onClick={() => setFabOpen((o) => !o)} title="Adicionar" aria-label="Adicionar">
-            <Plus size={26} strokeWidth={2.2} />
-          </button>
+          <button className={'fab' + (fabOpen ? ' open' : '')} onClick={() => setFabOpen((o) => !o)} title="Adicionar" aria-label="Adicionar"><Plus size={26} strokeWidth={2.2} /></button>
         </div>
       )}
 
@@ -958,12 +683,11 @@ export default function FinanceTracker() {
         />
       )}
 
+      {/* input de restore fica no root para funcionar também no estado vazio */}
+      <input type="file" accept=".json" ref={fileInputRef} onChange={importBackup} style={{ display: 'none' }} />
+
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      <ConfirmDialog
-        state={confirmState}
-        onConfirm={() => resolveConfirm(true)}
-        onCancel={() => resolveConfirm(false)}
-      />
+      <ConfirmDialog state={confirmState} onConfirm={() => resolveConfirm(true)} onCancel={() => resolveConfirm(false)} />
     </div>
   )
 }
