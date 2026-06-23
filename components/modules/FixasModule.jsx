@@ -2,6 +2,7 @@
 
 import { Plus, Repeat, Pencil, Trash2 } from 'lucide-react'
 import { formatBRL, findCategory, findCard, getInstallmentInfo } from '@/lib/helpers'
+import { CreditCardMini } from '@/components/CreditCardArt'
 
 export default function FixasModule({ ctx }) {
   const {
@@ -73,7 +74,7 @@ export default function FixasModule({ ctx }) {
                         <span>{cat?.label || 'Outros'}</span>
                         {installInfo && (<><span className="sep">·</span><span className={installInfo.remaining <= 0 ? 'good' : ''}>{installInfo.total}x · {installInfo.remaining > 0 ? `${installInfo.remaining} restantes` : 'Quitado'}</span></>)}
                         {dueTxt && (<><span className="sep">·</span><span className={dueCls}>{dueTxt}</span></>)}
-                        {card && (<><span className="sep">·</span><span>{card.name}</span></>)}
+                        {card && (<><span className="sep">·</span><CreditCardMini id={card.id} title={card.name} /></>)}
                       </div>
                     </div>
                   </div>

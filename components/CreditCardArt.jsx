@@ -35,3 +35,18 @@ export default function CreditCardArt({ id, name, className = '' }) {
     </div>
   )
 }
+
+// Mini-cartão para usar em linhas/listas: retângulo com o gradiente do banco
+// e o logo dentro, no lugar do nome em texto. Mostra a "cara" do cartão.
+export function CreditCardMini({ id, title, className = '' }) {
+  const card = DEFAULT_CARDS.find((c) => c.id === id)
+  const color = card?.color || '#555'
+  const bg = `linear-gradient(135deg, ${color} 0%, color-mix(in oklab, ${color} 62%, #000) 100%)`
+  const lightBg = ['bb', 'will', 'next'].includes(id)
+  const ink = lightBg ? '#1a1a1a' : '#fff'
+  return (
+    <span className={`cc-mini ${className}`} style={{ background: bg, color: ink }} title={title || card?.name || id}>
+      <BankLogo id={id} size={13} />
+    </span>
+  )
+}
