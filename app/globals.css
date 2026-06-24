@@ -356,6 +356,7 @@ button { font-family: inherit; }
   padding: 6px; display: flex; flex-direction: column; gap: 2px;
   animation: rise .2s cubic-bezier(.2,.9,.3,1);
 }
+.app.collapsed .profile-menu { left: 8px; right: auto; width: 216px; }
 .profile-menu .pm-head { display: flex; align-items: center; gap: 11px; padding: 8px 10px 10px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; }
 .profile-menu .pm-head .av { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
 .profile-menu .pm-head .meta { min-width: 0; }
