@@ -5,6 +5,7 @@ import {
   Plus, TrendingUp, TrendingDown, ChevronLeft, ChevronRight,
   Trash2, Target, Repeat, Download, BarChart3, CreditCard,
   Upload, Sun, Moon, Pencil, LogOut, Lightbulb, Shield, Wallet, CalendarClock,
+  Check,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -37,7 +38,7 @@ const splitBRL = (n) => {
 export default function FinanceTracker() {
   const [currentMonth, setCurrentMonth] = useState(monthKey(new Date()))
   const [data, setData] = useState({
-    monthlyData: {}, recurring: [], goal: null, disabledRecurring: {}, cards: [], incomeHistory: [],
+    monthlyData: {}, recurring: [], goal: null, disabledRecurring: {}, paidRecurring: {}, cards: [], incomeHistory: [],
     budgets: {}, reserve: null,
   })
   const [loaded, setLoaded] = useState(false)
@@ -118,7 +119,16 @@ export default function FinanceTracker() {
 
   const monthData = data.monthlyData[currentMonth] || emptyMonth()
   const disabledIds = data.disabledRecurring[currentMonth] || []
+  const paidRecurringIds = data.paidRecurring[currentMonth] || []
   const activeRecurring = data.recurring.filter((r) => !disabledIds.includes(r.id))
+
+  // Checklist "pago": pendências do mês (fixas ativas não-pagas + despesas avulsas não-pagas)
+  const pendingRecurring = activeRecurring.filter((r) => !paidRecurringIds.includes(r.id))
+  const pendingExpenses = monthData.expenses.filter((e) => !e.paid)
+  const pendingRecurringTotal = pendingRecurring.reduce((s, r) => s + r.amount, 0)
+  const pendingExpensesTotal = pendingExpenses.reduce((s, e) => s + e.amount, 0)
+  const pendingCount = pendingRecurring.length + pendingExpenses.length
+  const pendingTotal = pendingRecurringTotal + pendingExpensesTotal
   const {
     recurringTotal, mainIncome, totalExtras, totalIncome,
     variableExpensesTotal, totalExpenses, balance,
@@ -410,6 +420,35 @@ export default function FinanceTracker() {
     }
   }
 
+  const togglePaidExpense = async (id) => {
+    const wasPaid = (data.monthlyData[currentMonth]?.expenses || []).find((e) => e.id === id)?.paid || false
+    updateMonth((m) => ({ ...m, expenses: m.expenses.map((e) => (e.id === id ? { ...e, paid: !wasPaid } : e)) }))
+    const { error } = await db.setExpensePaid(userIdRef.current, id, !wasPaid)
+    if (error) {
+      console.error('Erro ao marcar como pago:', error)
+      updateMonth((m) => ({ ...m, expenses: m.expenses.map((e) => (e.id === id ? { ...e, paid: wasPaid } : e)) }))
+      addToast('Erro ao marcar como pago.')
+    }
+  }
+
+  const togglePaidRecurring = async (id) => {
+    const cur = data.paidRecurring[currentMonth] || []
+    const wasPaid = cur.includes(id)
+    setData((prev) => {
+      const curIds = prev.paidRecurring[currentMonth] || []
+      const next = curIds.includes(id) ? curIds.filter((d) => d !== id) : [...curIds, id]
+      return { ...prev, paidRecurring: { ...prev.paidRecurring, [currentMonth]: next } }
+    })
+    const { error } = wasPaid
+      ? await db.unmarkRecurringPaid(userIdRef.current, currentMonth, id)
+      : await db.markRecurringPaid(userIdRef.current, currentMonth, id)
+    if (error) {
+      console.error('Erro ao marcar fixa como paga:', error)
+      setData((prev) => ({ ...prev, paidRecurring: { ...prev.paidRecurring, [currentMonth]: cur } }))
+      addToast('Erro ao marcar como pago.')
+    }
+  }
+
   const toggleCard = async (cardId) => {
     const isActive = data.cards.includes(cardId)
     setData((prev) => ({
@@ -677,6 +716,11 @@ export default function FinanceTracker() {
                 <div>
                   <div className="ledger-total">{formatBRL(recurringTotal)}</div>
                   <div className="ledger-sub">{activeRecurring.length} de {data.recurring.length} ativas neste mês</div>
+                  {activeRecurring.length > 0 && (
+                    pendingRecurring.length > 0
+                      ? <div className="ledger-sub pending">{pendingRecurring.length} a pagar · faltam {formatBRL(pendingRecurringTotal)}</div>
+                      : <div className="ledger-sub done"><Check size={12} /> tudo pago neste mês</div>
+                  )}
                 </div>
               </div>
               {data.recurring.length > 0 ? (
@@ -686,6 +730,7 @@ export default function FinanceTracker() {
                     const col = cat?.color || '#8a8378'
                     const card = r.cardId ? findCard(r.cardId) : null
                     const off = disabledIds.includes(r.id)
+                    const isPaid = paidRecurringIds.includes(r.id)
                     const installInfo = getInstallmentInfo(r, currentMonth)
                     let dueTxt = null, dueCls = ''
                     if (r.dueDay) {
@@ -697,7 +742,7 @@ export default function FinanceTracker() {
                       else dueTxt = `vence dia ${r.dueDay}`
                     }
                     return (
-                      <div className={'row' + (off ? ' off' : '')} key={r.id}>
+                      <div className={'row' + (off ? ' off' : '') + (isPaid && !off ? ' paid-row' : '')} key={r.id}>
                         <div className="main">
                           <span className="ic-cell" style={{ background: `color-mix(in oklab, ${col} 16%, transparent)`, color: col }}>
                             <span className="cat-dot" style={{ background: col }} />
@@ -714,6 +759,17 @@ export default function FinanceTracker() {
                         </div>
                         <div className="amt neg">{formatBRL(r.amount)}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {!off && (
+                            <button
+                              className={'paidbtn' + (isPaid ? ' paid' : '')}
+                              onClick={() => togglePaidRecurring(r.id)}
+                              aria-pressed={isPaid}
+                              title={isPaid ? 'Pago — clique para marcar como pendente' : 'Marcar como pago'}
+                            >
+                              <Check size={13} />
+                              <span className="lbl">{isPaid ? 'Pago' : 'Pagar'}</span>
+                            </button>
+                          )}
                           <button className={'toggle' + (off ? '' : ' on')} onClick={() => toggleRecurringForMonth(r.id)} title={off ? 'Pausada' : 'Ativa'} />
                           <div className="row-actions">
                             <button onClick={() => setEditingRecurring(r)} aria-label="Editar"><Pencil size={14} /></button>
@@ -744,6 +800,11 @@ export default function FinanceTracker() {
                       {movimentacoesNet >= 0 ? '+ ' : '− '}{formatBRL(Math.abs(movimentacoesNet))}
                     </div>
                     <div className="ledger-sub">{formatBRL(totalExtras)} em ganhos − {formatBRL(variableExpensesTotal)} em despesas</div>
+                    {monthData.expenses.length > 0 && (
+                      pendingExpenses.length > 0
+                        ? <div className="ledger-sub pending">{pendingExpenses.length} despesa{pendingExpenses.length === 1 ? '' : 's'} a pagar · faltam {formatBRL(pendingExpensesTotal)}</div>
+                        : <div className="ledger-sub done"><Check size={12} /> despesas do mês pagas</div>
+                    )}
                   </div>
                 </div>
               )}
@@ -755,7 +816,7 @@ export default function FinanceTracker() {
                     const col = pos ? 'var(--accent)' : (cat?.color || '#8a8378')
                     const card = t.cardId ? findCard(t.cardId) : null
                     return (
-                      <div className="row" key={`${t.type}-${t.id}`}>
+                      <div className={'row' + (!pos && t.paid ? ' paid-row' : '')} key={`${t.type}-${t.id}`}>
                         <div className="main">
                           <span className="ic-cell" style={{ background: `color-mix(in oklab, ${col} 16%, transparent)`, color: col }}>
                             {pos ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
@@ -771,9 +832,22 @@ export default function FinanceTracker() {
                           </div>
                         </div>
                         <div className={'amt ' + (pos ? 'pos' : 'neg')}>{pos ? '+' : '−'} {formatBRL(t.amount)}</div>
-                        <div className="row-actions">
-                          <button onClick={() => setEditingTransaction(t)} aria-label="Editar"><Pencil size={14} /></button>
-                          <button className="del" onClick={() => pos ? removeExtra(t.id) : removeExpense(t.id)} aria-label="Remover"><Trash2 size={14} /></button>
+                        <div className="row-end">
+                          {!pos && (
+                            <button
+                              className={'paidbtn' + (t.paid ? ' paid' : '')}
+                              onClick={() => togglePaidExpense(t.id)}
+                              aria-pressed={!!t.paid}
+                              title={t.paid ? 'Pago — clique para marcar como pendente' : 'Marcar como pago'}
+                            >
+                              <Check size={13} />
+                              <span className="lbl">{t.paid ? 'Pago' : 'Pagar'}</span>
+                            </button>
+                          )}
+                          <div className="row-actions">
+                            <button onClick={() => setEditingTransaction(t)} aria-label="Editar"><Pencil size={14} /></button>
+                            <button className="del" onClick={() => pos ? removeExtra(t.id) : removeExpense(t.id)} aria-label="Remover"><Trash2 size={14} /></button>
+                          </div>
                         </div>
                       </div>
                     )
