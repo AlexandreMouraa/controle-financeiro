@@ -487,9 +487,22 @@ body:has(.auth-page)::before { opacity: 0; }
   .donut-wrap { gap: 18px; justify-content: center; }
   .legend { min-width: 0; width: 100%; }
 
-  /* rows: tighten action buttons so the description keeps room */
-  .row { gap: 8px; }
-  .row-actions button { width: 30px; height: 30px; }
+  /* rows: on a phone the description + amount get a full line to themselves,
+     and every control (valor / Pagar / toggle / editar / excluir) drops to a
+     second line, right-aligned, so nothing squeezes the text anymore. */
+  .row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "main amt"
+      "act  act";
+    column-gap: 10px;
+    row-gap: 8px;
+    padding: 11px 10px;
+  }
+  .row .main { grid-area: main; }
+  .row .amt { grid-area: amt; align-self: center; }
+  .row > *:last-child { grid-area: act; justify-self: end; }
+  .row-actions button { width: 32px; height: 32px; }
 
   /* modal: less inner padding on small screens */
   .overlay { padding: 14px; }
