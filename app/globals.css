@@ -21,6 +21,7 @@
   --bg-grain:  #e4ddd0;
   --paper:     #f6f2ea;
   --paper-2:   #f0ebe1;
+  --paper-3:   #e8e1d4;
   --ink:       #232019;
   --ink-soft:  #4b463c;
   --muted:     #837b6c;
@@ -45,6 +46,7 @@ html.dark {
   --bg-grain:  #1b1812;
   --paper:     #211e17;
   --paper-2:   #262219;
+  --paper-3:   #2d2820;
   --ink:       #ece6d8;
   --ink-soft:  #c5bdab;
   --muted:     #8f8676;
@@ -515,7 +517,10 @@ button { font-family: inherit; }
 select.filter { appearance: none; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px 34px 10px 13px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; outline: none; }
 select.filter:focus { border-color: var(--accent); }
 .selectbox::after { content: ""; position: absolute; right: 13px; top: 50%; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: translateY(-65%) rotate(45deg); pointer-events: none; }
-.dtable { width: 100%; border-collapse: collapse; }
+/* the table has several nowrap columns, so it can't shrink past ~560px —
+   scroll it inside the card instead of letting body's overflow-x:clip cut it off */
+.dtable-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.dtable { width: 100%; min-width: 560px; border-collapse: collapse; }
 .dtable th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 14px 12px; border-bottom: 1px solid var(--line); user-select: none; white-space: nowrap; }
 .dtable th.sortable { padding: 0; }
 .dtable th.sortable button {

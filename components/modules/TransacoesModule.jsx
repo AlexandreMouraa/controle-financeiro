@@ -110,37 +110,39 @@ export default function TransacoesModule({ ctx }) {
       </div>
 
       <section className="card reveal" style={{ padding: '8px 10px 4px', animationDelay: '.06s' }}>
-        <table className="dtable">
-          <thead>
-            <tr>
-              <SortTh k="date">Data</SortTh>
-              <SortTh k="desc">Descrição</SortTh>
-              <SortTh k="cat">Categoria</SortTh>
-              <th>Tipo</th>
-              <SortTh k="valor" num>Valor</SortTh>
-              <th className="num"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((t) => {
-              const pos = t.type === 'extra'
-              const cat = findCategory(t.category)
-              return (
-                <tr key={`${t.type}-${t.id}`}>
-                  <td className="date">{new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</td>
-                  <td className="desc">{t.description}</td>
-                  <td><span className="cat-pill"><span className="cat-dot" style={{ background: pos ? 'var(--accent)' : (cat?.color || '#8a8378') }} />{pos ? 'Ganho extra' : (cat?.label || 'Outros')}</span></td>
-                  <td><span className={'type-pill ' + (pos ? 'receita' : 'despesa')}>{pos ? 'Receita' : 'Despesa'}</span></td>
-                  <td className="amt num" style={{ color: pos ? 'var(--accent-ink)' : 'var(--ink)' }}>{pos ? '+ ' : '− '}{formatBRL(t.amount)}</td>
-                  <td className="num">
-                    <button className="linkbtn danger" style={{ padding: '4px 6px' }} onClick={() => askConfirm(`Excluir "${t.description}"?`, 'Excluir').then((ok) => { if (ok) removeTransaction(t) })} title="Excluir"><Trash2 size={14} /></button>
-                  </td>
-                </tr>
-              )
-            })}
-            {filtered.length === 0 && (<tr><td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>Nenhuma transação encontrada com esses filtros.</td></tr>)}
-          </tbody>
-        </table>
+        <div className="dtable-wrap">
+          <table className="dtable">
+            <thead>
+              <tr>
+                <SortTh k="date">Data</SortTh>
+                <SortTh k="desc">Descrição</SortTh>
+                <SortTh k="cat">Categoria</SortTh>
+                <th>Tipo</th>
+                <SortTh k="valor" num>Valor</SortTh>
+                <th className="num"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t) => {
+                const pos = t.type === 'extra'
+                const cat = findCategory(t.category)
+                return (
+                  <tr key={`${t.type}-${t.id}`}>
+                    <td className="date">{new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</td>
+                    <td className="desc">{t.description}</td>
+                    <td><span className="cat-pill"><span className="cat-dot" style={{ background: pos ? 'var(--accent)' : (cat?.color || '#8a8378') }} />{pos ? 'Ganho extra' : (cat?.label || 'Outros')}</span></td>
+                    <td><span className={'type-pill ' + (pos ? 'receita' : 'despesa')}>{pos ? 'Receita' : 'Despesa'}</span></td>
+                    <td className="amt num" style={{ color: pos ? 'var(--accent-ink)' : 'var(--ink)' }}>{pos ? '+ ' : '− '}{formatBRL(t.amount)}</td>
+                    <td className="num">
+                      <button className="linkbtn danger" style={{ padding: '4px 6px' }} onClick={() => askConfirm(`Excluir "${t.description}"?`, 'Excluir').then((ok) => { if (ok) removeTransaction(t) })} title="Excluir"><Trash2 size={14} /></button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {filtered.length === 0 && (<tr><td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>Nenhuma transação encontrada com esses filtros.</td></tr>)}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13.5, color: 'var(--muted)', padding: '0 4px' }}>
